@@ -1,0 +1,8 @@
+usr/share/applications/hildon-control-panel/*.so
+usr/share/applications/hildon/*
+usr/share/mime/packages/*
+usr/share/mime/application/*
+usr/share/dbus-1/services/*
+usr/lib/hildon-control-panel/*.so
+usr/bin/*
+etc/gconf/schemas/*

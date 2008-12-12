@@ -1,0 +1,11 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: maemosec-certman-applet
+Description: Certificate Manager UI library
+Version: @VERSION@
+Requires: hildon-1 >= 1.0.0
+Libs: -L@libdir@ -lmaemosec_certman_dialogs
+Cflags: -I${includedir}

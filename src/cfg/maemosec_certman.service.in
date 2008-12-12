@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=com.nokia.certman
+Exec=@prefix@/bin/maemosec_certman_service

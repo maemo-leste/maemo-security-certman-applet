@@ -1,0 +1,12 @@
+#!/bin/sh -e
+
+schemadir=/etc/gconf/schemas
+schema_DATA=maemosec_certman.schemas
+GCONFTOOL=gconftool-2
+GCONF_SCHEMA_CONFIG_SOURCE=xml::/etc/gconf/gconf.xml.defaults
+
+if [ "$1" = "configure" ]; then
+	GCONF_CONFIG_SOURCE=${GCONF_SCHEMA_CONFIG_SOURCE} ${GCONFTOOL} \
+	--makefile-install-rule ${schemadir}/${schema_DATA}
+fi
+

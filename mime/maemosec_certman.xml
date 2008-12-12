@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+   <mime-type type="application/x-certman">
+     <comment>Certificate file</comment>
+     <glob pattern="*.crt"/>
+     <glob pattern="*.der"/>
+     <glob pattern="*.pem"/>
+     <glob pattern="*.p12"/>
+     <glob pattern="*.pfx"/>
+     <glob pattern="*.CRT"/>
+     <glob pattern="*.DER"/>
+     <glob pattern="*.PEM"/>
+     <glob pattern="*.P12"/>
+     <glob pattern="*.PFX"/>
+     <glob pattern="*.Crt"/>
+     <glob pattern="*.CRt"/>
+     <glob pattern="*.CrT"/>
+     <glob pattern="*.cRt"/>
+     <glob pattern="*.cRT"/>
+     <glob pattern="*.crT"/>
+     <glob pattern="*.cer"/>
+     <glob pattern="*.CER"/>
+   </mime-type>
+</mime-info>

@@ -1,0 +1,29 @@
+Source: maemo-security-certman-applet
+Section: x11
+Priority: optional
+Maintainer:  Juhani Mäkelä <ext-juhani.3.makela@nokia.com>
+Build-Depends-Indep: gettext
+Build-Depends: debhelper (>= 4.0.0), pkg-config, intltool, libtool, osso-af-settings, libosso-dev (>= 1.0.2-1), libhildon1-dev (>= 0.9.9-6), hildon-control-panel-dev (>= 1.0.0-1), libdbus-glib-1-2 (>= 0.60-1osso1), libhildonfm2-dev, autoconf, automake1.7, libmaemosec-certman0 (>= 0.0.3), libssl-dev, libhildonhelp-dev
+Standards-Version: 3.6.2
+
+Package: maemosec-certman-applet
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, hildon-control-panel (>= 1.0.0), osso-icons, ke-recv-l10n-mr | ke-recv-l10n-mr0
+Description: Control Panel Certificate Manager plugin
+ Certificate Manager for Control Panel.
+
+Package: libmaemosec-certman-applet0
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, hildon-control-panel (>= 1.0.0), osso-icons, ke-recv-l10n-mr | ke-recv-l10n-mr0
+Description: Certificate Manager external UI library.
+ Certificate Manager external UI library.
+
+Package: libmaemosec-certman-applet-dev
+Section: devel
+Architecture: all
+Depends: libglib2.0-dev, libhildon1-dev, libmaemosec-certman-dev
+Description: Header files for Certificate Manager UI.
+ Contains files, which can be helpful when developing software, 
+ that needs certificate management UI services.
