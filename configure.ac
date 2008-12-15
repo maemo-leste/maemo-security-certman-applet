@@ -1,9 +1,7 @@
-# configure.ac for Control Panel Applet maemosec-certman-applet
-
-# Mandatory, inits autoconf
-AC_INIT(maemo-security-certman-applet, 0.0.1)
+AC_INIT([maemo-security-certman-applet], 0.0.1)
 # Initialize automake
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
+AC_CONFIG_HEADERS(config.h)
 
 LIBRARY_VERSION=0
 AC_SUBST(LIBRARY_VERSION)
@@ -12,14 +10,12 @@ AC_SUBST(LIBRARY_VERSION)
 AC_CONFIG_SRCDIR([src/applet_start.c])
 
 # For automake: generate rules to reproduce config.h, if needed
-AM_CONFIG_HEADER(config.h)
 
 AC_CANONICAL_HOST
 
 AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
-AM_PROG_LIBTOOL
 AC_SUBST(LIBTOOL_DEPS)
 
 AC_C_CONST
@@ -72,7 +68,11 @@ PKG_CHECK_MODULES(OPENSSL, [ openssl >= 0.9.8 ])
 AC_SUBST(OPENSSL_CFLAGS)
 AC_SUBST(OPENSSL_LIBS)
 
-PKG_CHECK_MODULES(MAEMOSEC, maemosec >= 0.0.3 maemosec-certman >= 0.0.3 )
+# Silly BIFH does not install these after building, so has to hard-code
+# libraries and includes to be able to build
+#PKG_CHECK_MODULES(MAEMOSEC, maemosec >= 0.0.3 maemosec-certman >= 0.0.3 )
+MAEMOSEC_CFLAGS=""
+MAEMOSEC_LIBS="-lmaemosec_certman -lmaemosec -lssl -lcrypto"
 AC_SUBST(MAEMOSEC_CFLAGS)
 AC_SUBST(MAEMOSEC_LIBS)
 
