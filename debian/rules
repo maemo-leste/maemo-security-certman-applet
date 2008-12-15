@@ -52,12 +52,12 @@ install-arch:
 	install -d debian/tmp debian/libmaemosec-certman-applet0 debian/libmaemosec-certman-applet-dev debian/maemosec-certman-applet
 	dh_installdirs -s
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp
-#	dh_movefiles
-#	dh_install -s
+	dh_movefiles
+	dh_install -s
 
 binary-common: build install
-#	dh_testdir
-#	#dh_testroot
+	dh_testdir
+	dh_testroot
 	dh_installchangelogs debian/changelog
 	dh_installdocs
 #	dh_installexamples

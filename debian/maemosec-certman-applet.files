@@ -1,4 +1,4 @@
-usr/share/applications/hildon-control-panel/*.so
+usr/share/applications/hildon-control-panel/*
 usr/share/applications/hildon/*
 usr/share/mime/packages/*
 usr/share/mime/application/*
