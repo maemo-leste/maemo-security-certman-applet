@@ -6,6 +6,6 @@ Version=1.0
 Name=cema_ap_application_title
 Comment=CM services registrator
 Exec=@prefix@/bin/maemosec_certman_service
-MimeType=application/x-certman
+MimeType=application/x-maemosec-certman
 X-Osso-Service=com.nokia.certman
 X-Text-Domain=@GETTEXT_PACKAGE@

@@ -68,11 +68,7 @@ PKG_CHECK_MODULES(OPENSSL, [ openssl >= 0.9.8 ])
 AC_SUBST(OPENSSL_CFLAGS)
 AC_SUBST(OPENSSL_LIBS)
 
-# Silly BIFH does not install these after building, so has to hard-code
-# libraries and includes to be able to build
-#PKG_CHECK_MODULES(MAEMOSEC, maemosec >= 0.0.3 maemosec-certman >= 0.0.3 )
-MAEMOSEC_CFLAGS=""
-MAEMOSEC_LIBS="-lmaemosec_certman -lmaemosec -lssl -lcrypto"
+PKG_CHECK_MODULES(MAEMOSEC, maemosec >= 0.0.3 maemosec-certman >= 0.0.3 )
 AC_SUBST(MAEMOSEC_CFLAGS)
 AC_SUBST(MAEMOSEC_LIBS)
 
