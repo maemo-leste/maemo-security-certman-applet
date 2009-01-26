@@ -1,3 +1,9 @@
+maemo-security-certman-applet (0.0.2) unstable; urgency=low
+
+  * osso-connectivity-ui integration
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 26 Jan 2009 15:00:28 +0200
+
 maemo-security-certman-applet (0.0.1) unstable; urgency=low
 
   * First release
