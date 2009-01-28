@@ -55,5 +55,6 @@ libmaemosec_certman_dialogs_la_SOURCES = \
 	ui/uiutils.c ui/uiutils.h \
 	ui/details.c \
 	ui/password.c \
+	ui/trust.c \
 	ui/osso-applet-certman.h \
 	ui/importexport.c
