@@ -73,7 +73,8 @@ binary-common: build install
 #	dh_installinfo
 #	dh_installman
 	dh_link
-	dh_strip
+	dh_strip --dbg-package="libmaemosec-certman-applet0" \
+		 --dbg-package="maemosec-certman-applet"
 	dh_compress
 	dh_fixperms
 #	What was this needed for?
