@@ -1,8 +1,9 @@
 maemo-security-certman-applet (0.0.3) unstable; urgency=low
 
-  * This version is supposed to work together with Connectivity EAP handling.
+  * Added the dialogs that the Connectivity UI uses. They are not pretty and
+	do not follow Fremantle UI standards, but can be used for testing.
 
- -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Thu, 29 Jan 2009 09:56:21 +0200
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Mon, 02 Feb 2009 11:00:00 +0200
 
 maemo-security-certman-applet (0.0.2) unstable; urgency=low
 
