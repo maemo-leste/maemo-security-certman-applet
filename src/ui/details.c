@@ -492,11 +492,11 @@ ASN1_time_to_localtime_str(ASN1_TIME* atime, char* to_buf, const unsigned buf_si
 		MAEMOSEC_ERROR("Invalid time '%s'", agtime->data);
 		return(0);
 	}
-	r.tm_mon--;
-	r.tm_year -= 1900;
 	MAEMOSEC_DEBUG(1, "%04d-%02d-%02d %02d:%02d:%02d", 
 				   r.tm_year, r.tm_mon, r.tm_mday, 
 				   r.tm_hour, r.tm_min, r.tm_sec);
+	r.tm_mon--;
+	r.tm_year -= 1900;
 	/*
 	 * Unfortunately there is not an easy way to convert UTC time
 	 * to time_t, as mktime expects local time. Subtract the
@@ -508,6 +508,7 @@ ASN1_time_to_localtime_str(ASN1_TIME* atime, char* to_buf, const unsigned buf_si
 		res -= timezone;
 		localtime_r(&res, &ltm);
 		strftime(to_buf, buf_size, "%X %x %z", &ltm);
+		MAEMOSEC_DEBUG(1, "%s", to_buf);
 		return(1);
 	}
 	return(0);

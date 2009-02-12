@@ -57,14 +57,19 @@ X509_STORE* root_store = NULL;
  *                         activation or system activation.
  */
 
-osso_return_t execute(osso_context_t * osso, gpointer data,
-                      gboolean user_activated)
+osso_return_t 
+execute(osso_context_t * osso, 
+		gpointer data,
+		gboolean user_activated)
 {
     gint ret = -1, tret = 0;
 
     MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 	ULOG_CRIT_L("ULOG_CRIT_L works?");
-    (void) bindtextdomain(PACKAGE, LOCALEDIR);
+
+    ret = bindtextdomain(LANGDOMAIN, LOCALEDIR);
+    MAEMOSEC_DEBUG(1, "bindtextdomain('%s','%s') returns %d",
+				   LANGDOMAIN, LOCALEDIR, ret);
 
     /* Get configuration from SettingsInternalize */
 

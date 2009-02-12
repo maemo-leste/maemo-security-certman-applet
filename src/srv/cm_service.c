@@ -28,6 +28,7 @@
 
 #include "dbus.h"
 #include "ui/osso-applet-certman.h"
+#include "../i18n.h"
 
 static Window _get_window_property(Window xwindow, Atom atom);
 static Atom _get_xatom_current_app_window(void);
@@ -47,9 +48,9 @@ int main(int argc, char **argv) {
     Window active_window;
 
     setlocale(LC_ALL, "");
-    bindtextdomain(PACKAGE, LOCALEDIR);
-    bind_textdomain_codeset(PACKAGE, "UTF-8");
-    textdomain(PACKAGE);
+    bindtextdomain(LANGDOMAIN, LOCALEDIR);
+    bind_textdomain_codeset(LANGDOMAIN, "UTF-8");
+    textdomain(LANGDOMAIN);
 
 	result = maemosec_certman_open(&root_store);
 	MAEMOSEC_DEBUG(1, "%s: maemosec_certman_open returned %d", __func__, result);

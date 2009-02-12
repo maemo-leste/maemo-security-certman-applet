@@ -49,27 +49,27 @@ gint dbus_message_handler(const gchar *method, GArray *arguments,
     (void) arguments;
     g_assert(method);
 
-    ULOG_DEBUG("dbus: method '%s' called\n", method);
+    MAEMOSEC_DEBUG(1, "dbus: method '%s' called", method);
 
     /* Catch the message and define what you want to do with it */
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_TOP_APPLICATION) == 0) {
 
-        ULOG_DEBUG("Got method 'mime_open' with method '%s'\n",
+        MAEMOSEC_DEBUG(1, "Got method 'mime_open' with method '%s'",
                    DBUS_METHOD_TOP_APPLICATION);
         gtk_window_present(GTK_WINDOW(top_aux));
         return OSSO_OK;
     }
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_MIME_OPEN) == 0) {
-        ULOG_DEBUG("Got method 'mime_open' with method '%s'\n",
+        MAEMOSEC_DEBUG(1, "Got method 'mime_open' with method '%s'",
                    DBUS_METHOD_MIME_OPEN);
         if ( (val.type == DBUS_TYPE_STRING)
              && (val.value.s != NULL) ) {
 
 
             fileuri = g_strdup(val.value.s);
-            ULOG_DEBUG("fileuri came with mime_open request = \"%s\"\n",
+            MAEMOSEC_DEBUG(1, "fileuri came with mime_open request = \"%s\"",
                        fileuri);
 
 
@@ -139,13 +139,13 @@ osso_return_t osso_rpc_cb(const gchar *interface,
     (void) args;
     g_assert(method);
 
-    ULOG_DEBUG("dbus: method '%s' called\n", method);
+    MAEMOSEC_DEBUG(1, "dbus: method '%s' called", method);
 
     /* Catch the message and define what you want to do with it */
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_TOP_APPLICATION) == 0) {
 
-        ULOG_DEBUG("Got dbus message with method '%s'\n",
+        MAEMOSEC_DEBUG(1, "Got dbus message with method '%s'",
                    DBUS_METHOD_TOP_APPLICATION);
         gtk_window_present(GTK_WINDOW(top_aux));
         return OSSO_OK;
@@ -153,12 +153,12 @@ osso_return_t osso_rpc_cb(const gchar *interface,
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_MIME_OPEN) == 0) {
 
-        ULOG_DEBUG("Got dbus message with method '%s'\n",
+        MAEMOSEC_DEBUG(1, "Got dbus message with method '%s'",
                    DBUS_METHOD_MIME_OPEN);
         if ( (val.type == DBUS_TYPE_STRING)
              && (val.value.s != NULL) ) {
             fileuri = g_strdup(val.value.s);
-            ULOG_DEBUG("fileuri came with mime_open request = \"%s\"\n",
+            MAEMOSEC_DEBUG(1, "fileuri came with mime_open request = \"%s\"",
                        fileuri);
 
             if (import_called == FALSE) {
@@ -173,15 +173,15 @@ osso_return_t osso_rpc_cb(const gchar *interface,
                 }
                 if (new_certs != NULL || cert_id != 0) {
 
-                    ULOG_DEBUG("The following new cids came:\n");
+                    MAEMOSEC_DEBUG(1, "The following new cids came:");
                     for (node = new_certs; node; node = node->next) {
-                        ULOG_DEBUG("cid = %d\n", *(guint *)node->data);
+                        MAEMOSEC_DEBUG(1, "cid = %d", *(guint *)node->data);
                         g_sprintf(buf, "%d", *(guint *)node->data);
                         node->data = g_strndup(buf, strlen(buf));
 
                     }
                     if (cert_id != 0) {
-                        ULOG_DEBUG("Got new cert_id = %d\n", (guint)cert_id);
+                        MAEMOSEC_DEBUG(1, "Got new cert_id = %d", (guint)cert_id);
                         g_sprintf(buf, "%d", cert_id);
                         new_certs = g_slist_prepend(new_certs, g_strndup(buf, strlen(buf)));
                     }
@@ -286,6 +286,6 @@ gboolean osso_deinit(osso_context_t *osso)
 }
 
 gboolean _import_file_stub() {
-    ULOG_DEBUG("Mime_open stub executed\n");
+    MAEMOSEC_DEBUG(1, "Mime_open stub executed");
     return TRUE;
 }

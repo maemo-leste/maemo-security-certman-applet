@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-   <mime-type type="application/x-maemosec-certman">
+   <mime-type type="application/x-osso-applet-certman">
      <comment>Certificate file</comment>
      <glob pattern="*.crt"/>
      <glob pattern="*.der"/>
