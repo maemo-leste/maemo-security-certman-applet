@@ -1,3 +1,15 @@
+maemo-security-certman-applet (0.0.4) unstable; urgency=low
+
+  * Made the UI to comply more closely Fremantle standards. Also
+    - Defined proper logical names for icons and labels. 
+      Fixes: NB#99134, NB#102539, NB#102591, NB#102592, NB#97739, #101517
+    - Removed tabs and put all certificates in a single pannable list.
+      Fixes: NB#99888
+    - Fixed the desktop file. Fixes: NB#97739
+    - Removed close button from the details dialog. Fixes: NB#101197
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Mon, 27 Feb 2009 16:40:00 +0200
+
 maemo-security-certman-applet (0.0.3) unstable; urgency=low
 
   * Added the dialogs that the Connectivity UI uses. They are not pretty and
