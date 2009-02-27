@@ -103,9 +103,6 @@ static gint _password_callback(gchar *buf, gint size, gint rwflag, void *u);
 /* Import dialog */
 GtkWidget* import_dialog = NULL;
 
-gboolean close_store_on_exit = FALSE;
-
-
 #define CST_DISABLE 
 
 gboolean 
@@ -194,10 +191,10 @@ _get_private_key(gpointer window, X509* certificate,
     /* create dialog for querying private key password */
     passwd_dialog = create_password_dialog(window,
                                            certificate,
-                                           _("cert_ti_enter_password"),
+                                           _("cert_ti_key_password"),
 										   "",
                                            _("cert_ia_password"),
-                                           _("cert_bd_enter_password_ok"),
+                                           "Done", // _("[wdgt_bd_done]"),
                                            _("cert_bd_enter_password_cancel"),
                                            &pk_pwd_entry,
                                            FALSE, 0);
@@ -288,22 +285,22 @@ determine_filetype(FILE* fp, void** idata)
 #define MAX_RETRIES 10
 
 static gchar*
-ask_password(gpointer window, int test_password(void* data, gchar* pwd), void* data)
+ask_password(gpointer window, int test_password(void* data, gchar* pwd), void* data, gchar* info)
 {
 	gint response = 0;
 	GtkWidget* passwd_dialog = NULL;
 	GtkWidget* passwd_entry  = NULL;
-	gchar* result;
+	gchar *result, *temp = NULL;
 	int retries = 0;
 
 	MAEMOSEC_DEBUG(1, "Ask password");
 	passwd_dialog = create_password_dialog(
 		window,
 		NULL,
-		"Enter file password", //_("cert_ti_enter_password"),
-		"This is an encrypted file in the PKCS12 format",
+		_("cert_ti_enter_file_password"),
+		temp = g_strdup_printf(_("cert_ia_explain_file_password"), info),
 		_("cert_ia_password"),
-		_("cert_bd_enter_password_ok"),
+		"Done", // _("[wdgt_bd_done]"),
 		_("cert_bd_enter_password_cancel"),
 		&passwd_entry,
 		FALSE, 
@@ -337,6 +334,9 @@ ask_password(gpointer window, int test_password(void* data, gchar* pwd), void* d
 
 	gtk_widget_hide_all(passwd_dialog);
 	gtk_widget_destroy(passwd_dialog);
+
+	if (temp)
+		g_free(temp);
 	return(result);
 }
 
@@ -356,26 +356,27 @@ ask_domains(gpointer window,
     GdkGeometry hints;
 	gchar *name;
     gint response = 0;
-
-	*dialog = gtk_dialog_new_with_buttons("Certificate manager",
+	
+	/*
+	 * TODO: Use the proper title, not defined currently.
+	 */
+	*dialog = gtk_dialog_new_with_buttons("Install Certificate",
 										 GTK_WINDOW(window),
 										 GTK_DIALOG_MODAL
 										 | GTK_DIALOG_DESTROY_WITH_PARENT
 										 | GTK_DIALOG_NO_SEPARATOR,
 										 NULL);
 
-	label = gtk_label_new("This container contains the following parts");
+	name = g_strdup_printf(_("cert_ia_explain_trust%s"), "");
+	label = gtk_label_new(name);
+	g_free(name);
 	gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
 	gtk_misc_set_alignment(GTK_MISC(label), 0.0, 0.0);
 	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), label);
 
     bn_ok = gtk_dialog_add_button(GTK_DIALOG(*dialog),
-						  "OK",
-						  GTK_RESPONSE_OK);
-
-    bn_cancel = gtk_dialog_add_button(GTK_DIALOG(*dialog),
-                          "Cancel",
-                          GTK_RESPONSE_CANCEL);
+								  "Done", 
+								  GTK_RESPONSE_OK);
 
 	hints.min_width  = PASSWD_MIN_WIDTH;
     hints.min_height = PASSWD_MIN_HEIGHT;
@@ -417,7 +418,7 @@ ask_domains(gpointer window,
 		for (i = 0; i < sk_X509_num(ca); i++) {
 			X509* cacert = sk_X509_value(ca, i);
 			gchar* c = get_certificate_name(cacert);
-			name = g_strdup_printf("Certificate '%s'", c);
+			name = g_strdup_printf("CA Certificate '%s'", c);
 			label = gtk_label_new(name);
 			g_free(name);
 			g_free(c);
@@ -429,7 +430,7 @@ ask_domains(gpointer window,
 		}
 	}
 
-	label = gtk_label_new("Please select the intended purpose");
+	label = gtk_label_new(_("cert_ti_application_trust"));
 	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), label);
 	gtk_misc_set_alignment(GTK_MISC(label), 0.0, 0.0);
 	gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
@@ -523,8 +524,6 @@ ask_domains(gpointer window,
 	}
 
     gtk_widget_set_sensitive(bn_ok, FALSE);
-    gtk_widget_set_sensitive(bn_cancel, FALSE);
-		
 	return(response);
 }
 
@@ -709,7 +708,8 @@ certmanui_import_file(gpointer window, const gchar* fileuri,
 			else if (test_pkcs12_password(idata, ""))
 				password = "";
 			else
-				password = ask_password(window, test_pkcs12_password, idata);
+				password = ask_password(window, test_pkcs12_password, idata, 
+										bare_file_name(fileuri));
 
 			rc = PKCS12_parse((PKCS12*)idata, password, &pkey, &cert, &ca);
 			MAEMOSEC_DEBUG(1, "parse PKCS12 returned %d, key=%p, cert=%p, cas=%p", 

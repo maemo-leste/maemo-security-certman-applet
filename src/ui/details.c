@@ -13,6 +13,7 @@
 #include <libosso.h>
 #include <osso-log.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include <hildon/hildon.h>
 #include <gdk/gdkkeysyms.h>
@@ -83,8 +84,6 @@ static void _add_labels(GtkTable* table, gint* row,
 
 /* Certificate details */
 
-extern gboolean close_store_on_exit;
-
 
 gboolean 
 certmanui_install_certificate_details_dialog(gpointer window,
@@ -112,12 +111,6 @@ certmanui_simple_certificate_details_dialog(gpointer window,
     (void)_certificate_details(window, DIALOG_SIMPLE, cert);
 }
 
-static gboolean
-return_FALSE(GtkWidget *dialog, GdkEvent *event, gpointer null)
-{
-  return TRUE;
-}
-
 static gboolean 
 _certificate_details(gpointer window,
 					 DetailsDialogType type,
@@ -126,21 +119,16 @@ _certificate_details(gpointer window,
     GtkWidget* cert_dialog = NULL;
     GtkWidget* cert_notebook = NULL;
     GtkWidget* cert_main_page = NULL;
-    GtkWidget* cert_chains_page = NULL;
-    GtkWidget* cert_passwd_button = NULL;
-
     GtkWidget* cert_simple_dialog = NULL;
     GtkWidget* current_dialog = NULL;
-
+	GtkWidget *bn_delete = NULL;
 
     GdkGeometry hints;
     GtkWidget* infobox = NULL;
     GtkWidget* scroller = NULL;
-    GtkWidget* chain_scroller = NULL;
     GtkRequisition requisition;
     gboolean certificate_installed = FALSE;
     gint ret = 0;
-    gboolean simple = TRUE; // (type != DIALOG_FULL);
 
     if (osso_global == NULL)
     {
@@ -156,107 +144,33 @@ _certificate_details(gpointer window,
 
 
     /* Check if cert_dialog != NULL */
-    if (simple)
-    {
-		MAEMOSEC_DEBUG(1, "%s: show simple dialog", __func__);
-        if (cert_simple_dialog == NULL)
+	MAEMOSEC_DEBUG(1, "%s: show simple dialog", __func__);
+
+	if (cert_simple_dialog == NULL) {
+		cert_simple_dialog = gtk_dialog_new_with_buttons
+			(_("cert_ti_viewing_dialog"),
+			 GTK_WINDOW(window),
+			 GTK_DIALOG_MODAL
+			 | GTK_DIALOG_DESTROY_WITH_PARENT
+			 | GTK_DIALOG_NO_SEPARATOR,
+			 NULL);
+
+		if (cert_simple_dialog == NULL)	{
+			return FALSE;
+		}
+
+		/* Add install button, if required */
+		if (type == DIALOG_INSTALL &&
+			cert_simple_dialog != NULL)
         {
-            cert_simple_dialog = gtk_dialog_new_with_buttons(
-                _("cert_ti_viewing_dialog"),
-                GTK_WINDOW(window),
-                GTK_DIALOG_MODAL
-                | GTK_DIALOG_DESTROY_WITH_PARENT
-                | GTK_DIALOG_NO_SEPARATOR,
-                NULL);
-            if (cert_simple_dialog == NULL)
-            {
-                return FALSE;
-            }
-            /* Add install button, if required */
-            if (type == DIALOG_INSTALL &&
-                cert_simple_dialog != NULL)
-            {
-                gtk_dialog_add_button(
-                    GTK_DIALOG(cert_simple_dialog),
-                    _("cert_bd_cd_install"),
-                    CM_RESPONSE_INSTALL);
-            }
-            /* Add close button */
-            if (cert_simple_dialog != NULL)
-            {
-                gtk_dialog_add_button( GTK_DIALOG (cert_simple_dialog),
-                                       _("cert_bd_c_close"),
-                                       CM_RESPONSE_CLOSE);
-            }
-        }
+			gtk_dialog_add_button
+				(GTK_DIALOG(cert_simple_dialog),
+				 _("cert_bd_cd_install"),
+				 CM_RESPONSE_INSTALL);
+		}
+	}
 
-        current_dialog = cert_simple_dialog;
-
-    } else {
-		MAEMOSEC_DEBUG(1, "%s: show detailed dialog", __func__);
-        if (cert_dialog == NULL)
-        {
-            cert_dialog = gtk_dialog_new_with_buttons(
-                _("cert_ti_viewing_dialog"),
-                GTK_WINDOW(window),
-                GTK_DIALOG_MODAL
-                | GTK_DIALOG_DESTROY_WITH_PARENT
-                | GTK_DIALOG_NO_SEPARATOR,
-                NULL);
-
-            /* Add buttons to dialog */
-            gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
-                                  _("cert_bd_c_delete"),
-                                  CM_RESPONSE_DELETE);
-
-            cert_passwd_button = gtk_dialog_add_button(
-                GTK_DIALOG(cert_dialog),
-                _("cert_bd_c_password"),
-                CM_RESPONSE_PASSWORD);
-
-            gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
-                                  _("cert_bd_c_trust"),
-                                  CM_RESPONSE_TRUST);
-
-            gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
-                                  _("cert_bd_c_close"),
-                                  CM_RESPONSE_CLOSE);
-
-            /* Create dialog pages and notebook */
-            cert_main_page = gtk_vbox_new(FALSE, 2);
-            cert_chains_page = gtk_vbox_new(FALSE, 2);
-
-            cert_notebook = gtk_notebook_new();
-
-            /* Append pages to notebook */
-            gtk_notebook_append_page(
-                GTK_NOTEBOOK(cert_notebook),
-                cert_main_page, NULL);
-            gtk_notebook_set_tab_label_text(
-                GTK_NOTEBOOK(cert_notebook),
-                cert_main_page,
-                _("cert_ti_main"));
-
-            gtk_notebook_append_page(
-                GTK_NOTEBOOK(cert_notebook),
-                cert_chains_page, NULL);
-            gtk_notebook_set_tab_label_text(
-                GTK_NOTEBOOK(cert_notebook),
-                cert_chains_page,
-                _("cert_ti_chains"));
-
-            /* Put notebook to dialog */
-            gtk_container_add(
-                GTK_CONTAINER(GTK_DIALOG(cert_dialog)->vbox),
-                cert_notebook);
-        }
-
-        current_dialog = cert_dialog;
-
-        g_signal_connect(G_OBJECT(current_dialog), "delete-event", (GCallback)return_FALSE, NULL);
-
-    }
-
+	current_dialog = cert_simple_dialog;
     infobox = _create_infobox(cert);
 
     /* Unable to open certificate, give error and exit */
@@ -264,16 +178,13 @@ _certificate_details(gpointer window,
     {
 		MAEMOSEC_DEBUG(1, "Failed to create infobox");
         hildon_banner_show_information (window, NULL, _("cert_error_open"));
-        if (close_store_on_exit)
-        {
-            gtk_widget_destroy(current_dialog);
-            if (current_dialog == cert_dialog)
+		gtk_widget_destroy(current_dialog);
+		if (current_dialog == cert_dialog)
             {
                 cert_dialog = NULL;
             } else {
-                cert_simple_dialog = NULL;
-            }
-        }
+			cert_simple_dialog = NULL;
+		}
         return FALSE;
     }
 
@@ -285,13 +196,9 @@ _certificate_details(gpointer window,
 
 
     /* Put infobox scroller to right place */
-    if (simple)
-    {
-        gtk_container_add(
-            GTK_CONTAINER(GTK_DIALOG(current_dialog)->vbox),
-            scroller);
+	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(current_dialog)->vbox),
+					  scroller);
 
-    }
 	gtk_container_add(GTK_CONTAINER(cert_main_page), scroller);
 
     /* Set window geometry */
@@ -317,6 +224,10 @@ _certificate_details(gpointer window,
                                   current_dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
+    bn_delete = gtk_dialog_add_button(GTK_DIALOG(current_dialog),
+									  _("cert_bd_c_delete"), 
+									  GTK_RESPONSE_DELETE_EVENT);
+
     /* Add context sensitive help icon */
     hildon_help_dialog_help_enable(GTK_DIALOG(current_dialog),
                                 CM_HELP_KEY_DETAILS,
@@ -338,6 +249,11 @@ _certificate_details(gpointer window,
         ULOG_DEBUG("After gtk_dialog_run\n");
 
         if (GTK_RESPONSE_DELETE_EVENT == ret) {
+			/*
+			 * Delete certificate
+			 */
+			MAEMOSEC_DEBUG(1, "%s: Delete!", __func__);
+			
 			ret = CM_RESPONSE_CLOSE;
         }
     }
@@ -346,55 +262,75 @@ _certificate_details(gpointer window,
 
     /* Scroller is always destroyed */
     gtk_widget_destroy(scroller);
-    scroller = NULL; infobox = NULL;
-
-    /* If not simple dialog, destroy chain scroller */
-    if (!simple)
-    {
-        gtk_widget_destroy(chain_scroller); chain_scroller = NULL;
-    }
+    scroller = NULL; 
+	infobox = NULL;
 
     /* Save store and delete dialog, if they weren't initialized */
 
-    if (current_dialog == cert_dialog) cert_dialog = NULL;
-    else cert_simple_dialog = NULL;
+    if (current_dialog == cert_dialog) 
+		cert_dialog = NULL;
+    else 
+		cert_simple_dialog = NULL;
     gtk_widget_destroy(current_dialog);
 
-    if (close_store_on_exit)
+	if (current_dialog == cert_dialog)
     {
-        if (current_dialog == cert_dialog)
-        {
-            cert_dialog = NULL;
-        } else {
-            cert_simple_dialog = NULL;
-        }
-        gtk_widget_destroy(current_dialog);
-    }
+        cert_dialog = NULL;
+    } else {
+		cert_simple_dialog = NULL;
+	}
+	gtk_widget_destroy(current_dialog);
+	gtk_widget_destroy(bn_delete);
     return certificate_installed;
 }
 
 
 static int
 get_fingerprint(X509 *of_cert, 
-				EVP_MD* of_type, 
+				EVP_MD** use_type, 
 				char* label, 
 				size_t label_size,
 				char* value,
 				size_t value_size)
 {
+	EVP_MD* of_type;
 	unsigned char digest_bin[64];
 	size_t digest_len, i;
 	char* digest_name, *hto;
 
-	if (of_type == EVP_sha1()) 
-		digest_name = "SHA1";
-	else if (of_type == EVP_md5())
-		digest_name = "MD5";
-	else {
-		MAEMOSEC_ERROR("Unknown digest type");
+	/*
+	 * DEBUG: Warn about MD5-based signatures
+	 */
+	if (of_cert && of_cert->sig_alg && of_cert->sig_alg->algorithm) {
+		i2t_ASN1_OBJECT((char*)digest_bin, 
+						sizeof(digest_bin), 
+						of_cert->sig_alg->algorithm);
+		digest_bin[sizeof(digest_bin)-1] = '\0';
+		MAEMOSEC_DEBUG(1, "signed by %s", digest_bin);
+		for (hto = digest_bin; *hto; hto++)
+			*hto = toupper(*hto);
+	} else {
+		MAEMOSEC_ERROR("Unknown signature algorithm");
 		return(0);
 	}
-	
+
+	if (0 == memcmp("MD5", digest_bin, strlen("MD5"))) {
+		of_type = EVP_md5();
+		digest_name = "MD5";
+	} else if (0 == memcmp("MD2", digest_bin, strlen("MD2"))) {
+		of_type = EVP_md2();
+		digest_name = "MD2";
+	} else {
+		/*
+		 * TODO: What about sha256/384/512 and other more
+		 * secure hashes?
+		 */
+		of_type = EVP_sha1();
+		digest_name = "SHA1";
+	}
+	MAEMOSEC_DEBUG(1, "Compute %s fingerprint", digest_name);
+	*use_type = of_type;
+
 	if (X509_digest(of_cert, of_type, digest_bin, &digest_len)) {
 		snprintf(label, 
 				 label_size,
@@ -463,6 +399,54 @@ set_multiline_value(GtkWidget* infobox, gint* row, const char* label, const char
 }
 
 
+static const int fullname_components [] = {
+		NID_commonName, NID_organizationalUnitName, NID_organizationName
+};
+
+struct cb_info {
+	GtkWidget* infobox;
+	gint* row;
+	char* label;
+};
+
+static void add_name_component(unsigned char* text, void* ctx)
+{
+	struct cb_info* lctx = (struct cb_info*)ctx;
+
+	/*
+	 * Do not add empty components.
+	 */
+	if (NULL != text && strlen((char*)text) && NULL != ctx) {
+		_add_labels(GTK_TABLE(lctx->infobox),
+					lctx->row,
+					lctx->label, 
+					(char*)text,
+					FALSE);
+		if ('\0' != *lctx->label)
+			*lctx->label = '\0';
+	}
+}
+
+static void
+add_full_name(GtkWidget* infobox, gint* row, const char* label, X509_NAME* from_name)
+{
+	struct cb_info cbi;
+
+	cbi.infobox = infobox;
+	cbi.row = row;
+	cbi.label = g_strdup(label);
+
+	pick_name_components_by_NIDS
+		(from_name, 
+		 fullname_components,
+		 sizeof(fullname_components)/sizeof(fullname_components[0]),
+		 add_name_component,
+		 &cbi);
+
+	g_free(cbi.label);
+}				 
+
+
 static int
 ASN1_time_to_localtime_str(ASN1_TIME* atime, char* to_buf, const unsigned buf_size)
 {
@@ -515,6 +499,33 @@ ASN1_time_to_localtime_str(ASN1_TIME* atime, char* to_buf, const unsigned buf_si
 }
 
 
+static void
+check_certificate(X509 *cert, int *self_signed, int *openssl_error)
+{
+	X509_STORE* tmp_store;
+	X509_STORE_CTX *csc;
+	int rc;
+
+	*self_signed = 0;
+	*openssl_error = 0;
+	tmp_store = X509_STORE_new();
+	X509_STORE_add_cert(tmp_store, cert);
+	
+	csc = X509_STORE_CTX_new();
+	rc = X509_STORE_CTX_init(csc, tmp_store, cert, NULL);
+	
+	if (X509_verify_cert(csc) > 0) {
+		*self_signed = 1;
+	} else {
+		*openssl_error = csc->error;
+		MAEMOSEC_DEBUG(1, "Verification fails: %s", 
+					   X509_verify_cert_error_string(csc->error));
+	}
+	X509_STORE_CTX_free(csc);
+	X509_STORE_free(tmp_store);
+}
+
+
 static GtkWidget* 
 _create_infobox(X509* cert)
 {
@@ -536,36 +547,30 @@ _create_infobox(X509* cert)
 
     /* Issued to, issued by */
 	{
-		gchar *issued_to=NULL, *issued_by=NULL;
+		int is_self_signed, openssl_error;
 
-		issued_to = X509_NAME_to_str(X509_get_subject_name(cert), FALSE);
-		_add_labels(GTK_TABLE(infobox),
-					&row, 
-					_("cert_fi_certmang_issued_to"), 
-					issued_to, 
-					TRUE);
-
-		issued_by = X509_NAME_to_str(X509_get_issuer_name(cert), FALSE);
-		/*
-		 * TODO: A more accurate test might be needed
-		 */
-		if (strcmp(issued_to, issued_by) == 0) {
+		add_full_name(infobox, 
+					  &row, 
+					  _("cert_fi_certmang_issued_to"), 
+					  X509_get_subject_name(cert));
+					  
+		check_certificate(cert, &is_self_signed, &openssl_error);
+		if (is_self_signed) {
 			_add_labels(GTK_TABLE(infobox),
 						&row, 
 						_("cert_fi_certmang_issued_by"), 
+						/* TODO: This string is missing from NLS */
 						"(self-signed)",
 						TRUE);
 		} else {
-			_add_labels(GTK_TABLE(infobox),
-						&row, 
-						_("cert_fi_certmang_issued_by"), 
-						issued_by, 
-						TRUE);
+			add_full_name(infobox, 
+						  &row, 
+						  _("cert_fi_certmang_issued_by"), 
+						  X509_get_issuer_name(cert));
 		}
-		MAEMOSEC_DEBUG(1, "Filled issued to '%s', issued by '%s'",
-					   issued_to, issued_by);
-		g_free(issued_to);
-		g_free(issued_by);
+		/*
+		 * TODO: Handle openssl error
+		 */
 	}
 
 	/*
@@ -588,35 +593,32 @@ _create_infobox(X509* cert)
 									  sizeof(timestamp)))
 			_add_labels(GTK_TABLE(infobox),
 						&row, 
-						_("cert_fi_certmang_valid"), 
+						_("cert_fi_certmang_expired"), 
 						timestamp, 
 						TRUE);
 	}
 
     /* Fingerprint */
 	{
+		EVP_MD* sigtype;
 		char fingerprint_label[100];
 		char fingerprint_text [100];
 
 		if (get_fingerprint(cert, 
-							EVP_sha1(), 
+							&sigtype,
 							fingerprint_label, 
 							sizeof(fingerprint_label),
 							fingerprint_text,
 							sizeof(fingerprint_text)
-							)
-			)
+							))
+		{
+			if (EVP_md5() == sigtype || EVP_md2() == sigtype)
+				hildon_helper_set_logical_color (GTK_WIDGET(infobox), 
+												 GTK_RC_FG, 
+												 GTK_STATE_NORMAL, 
+												 "AttentionColor");
 			set_multiline_value(infobox, &row, fingerprint_label, fingerprint_text);
-
-		if (get_fingerprint(cert, 
-							EVP_md5(), 
-							fingerprint_label, 
-							sizeof(fingerprint_label),
-							fingerprint_text,
-							sizeof(fingerprint_text)
-							)
-			)
-			set_multiline_value(infobox, &row, fingerprint_label, fingerprint_text);
+		}
 	}
     return(infobox);
 }
@@ -648,7 +650,6 @@ static void _add_labels(GtkTable* table,
 
     gtk_misc_set_alignment(GTK_MISC(label_label), 1.0, 0.0);
     gtk_misc_set_alignment(GTK_MISC(value_label), 0.0, 0.0);
-
 
     *row += 1;
 }

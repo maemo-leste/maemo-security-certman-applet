@@ -101,11 +101,8 @@ typedef enum
 
 /* Certificate list colums */
 enum {
-    MAIN_IMAGE_COL = 0,
-    MAIN_VALIDITY_COL,
-    MAIN_NAME_COL,
+    MAIN_NAME_COL = 0,
     MAIN_PURPOSE_COL,
-    MAIN_ISSUED_COL,
     MAIN_ID_COL,
     MAIN_DOMAIN_COL,
     MAIN_NUM_COLUMNS

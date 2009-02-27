@@ -10,6 +10,8 @@
    @author  Karoliina T. Salminen <karoliina.t.salminen@nokia.com>
 */
 
+#include <string.h>
+
 #include <hildon/hildon.h>
 #include <osso-log.h>
 
@@ -385,7 +387,8 @@ gchar* get_certificate_name(X509* cert)
     return(X509_NAME_to_str(X509_get_subject_name(cert), FALSE));
 }
 
-gchar* get_purpose_name(const char* for_domain_name)
+gchar* 
+get_purpose_name(const char* for_domain_name)
 {
 	int i;
 
@@ -396,6 +399,39 @@ gchar* get_purpose_name(const char* for_domain_name)
 			return(_(pkcs12_targets[i].symbolic_name));
 		}
 	}
-	return("(Unknown)");
+	return("");
 }
 
+void
+pick_name_components_by_NIDS(X509_NAME* of_name, 
+							 const int* nids, 
+							 unsigned nbrofnids, 
+							 void cb_func(unsigned char*,void*),
+							 void* ctx)
+{
+	unsigned i;
+
+	if (NULL == of_name || 0 == nbrofnids )
+		return;
+
+	for (i = 0; i < nbrofnids; i++) {
+		int idx;
+		idx = X509_NAME_get_index_by_NID(of_name, nids[i], -1);
+		if (-1 != idx) {
+			X509_NAME_ENTRY *entry = NULL;
+			entry = X509_NAME_get_entry(of_name, idx);
+			if (NULL != entry) {
+				ASN1_STRING *str = NULL;
+				str = X509_NAME_ENTRY_get_data(entry);
+				if (NULL != str) {
+					unsigned char *quark = NULL;
+					ASN1_STRING_to_UTF8(&quark, str);
+					if (NULL != quark) {
+						cb_func(quark, ctx);
+						OPENSSL_free(quark);
+					}
+				}
+			}
+		}
+	}
+}

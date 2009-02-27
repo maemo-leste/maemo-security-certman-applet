@@ -299,10 +299,6 @@ create_password_dialog(gpointer window,
         GTK_CONTAINER(GTK_DIALOG(passwd_dialog)->vbox),
         entry_text);
 
-    gtk_dialog_add_button(GTK_DIALOG(passwd_dialog),
-                          cancel_label,
-                          GTK_RESPONSE_CANCEL);
-
     /* Set window geometry */
     hints.min_width  = PASSWD_MIN_WIDTH;
     hints.min_height = PASSWD_MIN_HEIGHT;

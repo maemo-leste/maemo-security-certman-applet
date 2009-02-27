@@ -121,8 +121,13 @@ extern "C" {
 	
 
 	gchar* get_purpose_name(const char* for_domain_name);
-  
 
+	void pick_name_components_by_NIDS(X509_NAME* of_name, 
+									  const int* nids, 
+									  unsigned nbrofnids, 
+									  void cb_func(unsigned char*,void*),
+									  void* ctx);
+  
 #ifdef __cplusplus
 }
 #endif
