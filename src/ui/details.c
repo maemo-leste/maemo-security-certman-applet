@@ -186,7 +186,7 @@ _certificate_details(gpointer window,
 	if (MAEMOSEC_CERTMAN_DOMAIN_PRIVATE == domain_flags)
 		bn_delete = gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
 										  _("cert_bd_c_delete"), 
-										  GTK_RESPONSE_DELETE_EVENT);
+										  GTK_RESPONSE_APPLY);
 
     /* Add context sensitive help icon */
     hildon_help_dialog_help_enable(GTK_DIALOG(cert_dialog),
@@ -202,19 +202,19 @@ _certificate_details(gpointer window,
         gtk_widget_grab_focus(cert_notebook);
     }
 
-    while (ret != CM_RESPONSE_CLOSE)
+    while (ret != GTK_RESPONSE_DELETE_EVENT)
     {
         ULOG_DEBUG("Before gtk_dialog_run\n");
         ret = gtk_dialog_run(GTK_DIALOG(cert_dialog));
         ULOG_DEBUG("After gtk_dialog_run\n");
 
-        if (GTK_RESPONSE_DELETE_EVENT == ret) {
+        if (GTK_RESPONSE_APPLY == ret) {
 			/*
 			 * Delete certificate
 			 */
 			MAEMOSEC_DEBUG(1, "%s: Delete!", __func__);
 			certificate_deleted = TRUE;
-			ret = CM_RESPONSE_CLOSE;
+			ret = GTK_RESPONSE_DELETE_EVENT;
         }
     }
 

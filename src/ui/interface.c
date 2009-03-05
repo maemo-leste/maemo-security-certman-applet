@@ -351,7 +351,10 @@ _populate_certificates(int pos, void* domain_name, void* store)
 		_copy_search_tree(cd_info.search_tree, &cd_info);
 		_release_search_tree(cd_info.search_tree);
 	}
-	return(rc);
+	/*
+	 * Continue iteration even if there are invalid domains.
+	 */
+	return(0);
 }
 
 
