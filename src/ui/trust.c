@@ -12,6 +12,7 @@
 
 #include <libosso.h>
 #include <osso-log.h>
+#define __HILDON_REMOTE_TEXTURE_H__
 #include <hildon/hildon.h>
 
 #include <unistd.h>

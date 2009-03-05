@@ -50,40 +50,6 @@ extern "C" {
     } CertmanUIErrorType;
 
 /**
-   Represent UI for changing the password of the given certificate.
-   Blocks the UI until password is changed.
-
-   @param window        Parent window for the dialogs.
-   @param cert_id       Id of the certificate, whose password is to be
-   changed.
-
-   @return TRUE, if changing the password was succesful.
-*/
-    gboolean 
-	certmanui_change_password(gpointer window, 
-							  maemosec_key_id cert_id);
-
-/**
-   Represent UI for changing he password of a given private key.
-   Blocks the UI until password is changed.
-
-   @param window        Parent window for the dialogs.
-   @param key_id        Id of the key, whose password is to be
-   changed.
-   @param new_key_id    Pointer to maemosec_key_id, where the new key id
-   is saved. Key id is changed in the process.
-   @param new_passwd    Pointer to a newly allocated string
-   representing the new password.
-
-   @retunr TRUE, if changing the password was succesful.
-*/
-    gboolean 
-	certmanui_change_privatekey_passwoard(gpointer window,
-										  maemosec_key_id key_id,
-										  maemosec_key_id* new_key_id,
-										  gchar** new_passwd);
-
-/**
    Represents a details dialog in the UI. Blocks until this dialog
    is dismissed.
 
@@ -92,36 +58,10 @@ extern "C" {
                         include delete or change password buttons.
    @param certificate   Certificate, whose details are shown.
 */
-    void 
+    gboolean
 	certmanui_certificate_details_dialog(gpointer window,
-										 gboolean simple,
+										 int domain_flags,
 										 X509* certificate);
-
-/**
-   Show a details dialog for unknown certificate (not in the store).
-   Also install button is presented for installing the given
-   certificate. Blocks, until the dialog is dismissed.
-
-   @param window        Parent window for the dialog.
-   @param cert          Unknown certificate.
-
-   @return TRUE, if user decided to install the certificate and the
-   installation was succesful.
-*/
-    gboolean 
-	certmanui_install_certificate_details_dialog(gpointer window,
-												 X509* cert);
-
-/**
-   Shows a details dialog for unknown certificate (not in the store).
-   Blocks, until the dialog is dismissed.
-
-   @param window        Parent window for the dialog.
-   @param cert          Unknown certificate.
-*/
-    void 
-	certmanui_simple_certificate_details_dialog(gpointer window,
-												X509* cert);
 
 /**
    Imports a certificate from a given file.Certificate is added to

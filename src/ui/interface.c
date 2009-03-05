@@ -9,6 +9,8 @@
    @author  Karoliina T. Salminen <karoliina.t.salminen@nokia.com>
 */
 
+#define _XOPEN_SOURCE
+
 #include <libosso.h>
 #include <osso-log.h>
 #include <stdio.h>
@@ -23,6 +25,7 @@
 #include <maemosec_common.h>
 #include <maemosec_certman.h>
 
+#define __HILDON_REMOTE_TEXTURE_H__
 #include <hildon/hildon.h>
 
 #include "callbacks.h"
@@ -65,7 +68,6 @@ static int domain_flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
 GdkGeometry hints;
 RowParameter row_params[2];
 ButtonParameter button_param;
-RowActivatedParameter rowact_param;
 
 /* These are found in details.c
    extern GtkWidget* cert_dialog;
@@ -116,13 +118,10 @@ ui_create_main_dialog(gpointer window)
 	GtkWidget *panarea = hildon_pannable_area_new();
 	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
 										  GTK_WIDGET(cert_list));
-    rowact_param.id_col = MAIN_ID_COL;
-    rowact_param.simple = FALSE;
-
     g_signal_connect(G_OBJECT(cert_list), 
 					 "row-activated",
                      G_CALLBACK(cert_list_row_activated),
-                     &rowact_param);
+                     cert_list_store);
 
 	MAEMOSEC_DEBUG(1, "Populate user certificates");
 	_add_row_header(cert_list_store, "User");
@@ -178,6 +177,7 @@ struct cert_info {
 
 struct cert_display_info {
 	const char* domain_name;
+	int domain_type;
 	struct cert_info* search_tree;
 	GtkListStore* store;
 	GtkTreeIter* iter;
@@ -228,7 +228,9 @@ fill_cert_data(int pos, X509* cert, void* info)
 	rc = maemosec_certman_get_key_id(cert, key_id);
 	rc = maemosec_certman_key_id_to_str(key_id, key_str, sizeof(key_str));
 
-	MAEMOSEC_DEBUG(3, "Add '%s:%s:%s'", cd_info->domain_name, namebuf, key_str);
+	MAEMOSEC_DEBUG(3, "Add '%s:%s:%s:%s'", 
+				   MAEMOSEC_CERTMAN_DOMAIN_SHARED==cd_info->domain_type?"shared":"private",
+				   cd_info->domain_name, namebuf, key_str);
 
 	cis = malloc(sizeof(struct cert_info));
 	memset(cis, '\0', sizeof(struct cert_info));
@@ -288,10 +290,11 @@ _copy_search_tree(struct cert_info *node, struct cert_display_info* to_this)
 	MAEMOSEC_DEBUG(1, "%s", node->nickname);
 	gtk_list_store_append(to_this->store, to_this->iter);
 	gtk_list_store_set(to_this->store, to_this->iter, 
-					   MAIN_NAME_COL,    node->nickname, 
+					   MAIN_NAME_COL, node->nickname, 
 					   MAIN_PURPOSE_COL, get_purpose_name(to_this->domain_name), 
-					   MAIN_ID_COL,      node->key_str,
-					   MAIN_DOMAIN_COL,  to_this->domain_name,
+					   MAIN_ID_COL, node->key_str,
+					   MAIN_DOMAIN_COL, to_this->domain_name,
+					   MAIN_DOM_TYPE_COL, to_this->domain_type,
 					   -1);
 	if (node->right)
 		_copy_search_tree(node->right, to_this);
@@ -333,6 +336,7 @@ _populate_certificates(int pos, void* domain_name, void* store)
 				   maemosec_certman_nbrof_certs(my_domain));
 
 	cd_info.domain_name = (char*)domain_name;
+	cd_info.domain_type = domain_flags;
 	cd_info.store = (GtkListStore*)store;
 	cd_info.iter = &iter;
 	cd_info.search_tree = NULL;
@@ -416,7 +420,8 @@ _create_certificate_list(GtkWidget** scroller,
                                      G_TYPE_STRING,      /* MAIN_NAME_COL */
                                      G_TYPE_STRING,      /* MAIN_PURPOSE_COL */ 
 									 G_TYPE_STRING,      /* MAIN_ID_COL (hidden) */
-									 G_TYPE_STRING);     /* MAIN_DOMAIN_COL (hidden) */
+									 G_TYPE_STRING,      /* MAIN_DOMAIN_COL (hidden) */
+									 G_TYPE_INT);        /* MAIN_DOM_TYPE_COL (hidden) */
 
     /* Create list */
     *list = gtk_tree_view_new_with_model(GTK_TREE_MODEL(*list_store));

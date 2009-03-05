@@ -9,6 +9,8 @@
    @author  Karoliina T. Salminen <karoliina.t.salminen@nokia.com>
 */
 
+#define _XOPEN_SOURCE
+
 #include <libosso.h>
 #include <osso-log.h>
 #include <string.h>

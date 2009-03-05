@@ -9,6 +9,7 @@
    Contact: Jakub Pavelek <jakub.pavelek@nokia.com>
 */
 
+#define _XOPEN_SOURCE 
 
 #include <gtk/gtk.h>
 #include <gconf/gconf-client.h>

@@ -10,6 +10,7 @@
 */
 
 #define _BSD_SOURCE
+#define _XOPEN_SOURCE
 #include <libosso.h>
 #include <osso-log.h>
 #include <stdio.h>
@@ -62,7 +63,7 @@ typedef enum {
    FALSE, if cert_id is specified (and cert is not specified).
 */
 static gboolean _certificate_details(gpointer window,
-                                     DetailsDialogType type,
+                                     int domain_flags,
                                      X509* cert);
 
 
@@ -83,51 +84,32 @@ static void _add_labels(GtkTable* table, gint* row,
 /* Implementation */
 
 /* Certificate details */
-
-
-gboolean 
-certmanui_install_certificate_details_dialog(gpointer window,
-											 X509* cert)
-{
-    return _certificate_details(window, DIALOG_INSTALL, cert);
-}
-
-
-void 
+gboolean
 certmanui_certificate_details_dialog(gpointer window,
-									 gboolean simple,
+									 int domain_flags,
 									 X509* certificate) 
 {
-    (void)_certificate_details(window,
-                               simple? DIALOG_SIMPLE : DIALOG_FULL,
-							   certificate);
+    return(_certificate_details(window,
+								domain_flags,
+								certificate));
 }
 
-
-void 
-certmanui_simple_certificate_details_dialog(gpointer window,
-											X509* cert)
-{
-    (void)_certificate_details(window, DIALOG_SIMPLE, cert);
-}
 
 static gboolean 
 _certificate_details(gpointer window,
-					 DetailsDialogType type,
+					 int domain_flags,
 					 X509* cert)
 {
     GtkWidget* cert_dialog = NULL;
     GtkWidget* cert_notebook = NULL;
     GtkWidget* cert_main_page = NULL;
-    GtkWidget* cert_simple_dialog = NULL;
-    GtkWidget* current_dialog = NULL;
 	GtkWidget *bn_delete = NULL;
 
     GdkGeometry hints;
     GtkWidget* infobox = NULL;
     GtkWidget* scroller = NULL;
     GtkRequisition requisition;
-    gboolean certificate_installed = FALSE;
+    gboolean certificate_deleted = FALSE;
     gint ret = 0;
 
     if (osso_global == NULL)
@@ -136,18 +118,11 @@ _certificate_details(gpointer window,
         return FALSE;
     }
 
-    /* Check that if dialog is install, then cert structure is supplied, cert_id is not used */
-    if (type == DIALOG_INSTALL && cert == NULL) {
-        ULOG_CRIT("Install dialog requested, certificate structure is NULL");
-        return FALSE;
-    }
-
-
     /* Check if cert_dialog != NULL */
 	MAEMOSEC_DEBUG(1, "%s: show simple dialog", __func__);
 
-	if (cert_simple_dialog == NULL) {
-		cert_simple_dialog = gtk_dialog_new_with_buttons
+	if (cert_dialog == NULL) {
+		cert_dialog = gtk_dialog_new_with_buttons
 			(_("cert_ti_viewing_dialog"),
 			 GTK_WINDOW(window),
 			 GTK_DIALOG_MODAL
@@ -155,22 +130,12 @@ _certificate_details(gpointer window,
 			 | GTK_DIALOG_NO_SEPARATOR,
 			 NULL);
 
-		if (cert_simple_dialog == NULL)	{
+		if (cert_dialog == NULL)	{
 			return FALSE;
 		}
 
-		/* Add install button, if required */
-		if (type == DIALOG_INSTALL &&
-			cert_simple_dialog != NULL)
-        {
-			gtk_dialog_add_button
-				(GTK_DIALOG(cert_simple_dialog),
-				 _("cert_bd_cd_install"),
-				 CM_RESPONSE_INSTALL);
-		}
 	}
 
-	current_dialog = cert_simple_dialog;
     infobox = _create_infobox(cert);
 
     /* Unable to open certificate, give error and exit */
@@ -178,13 +143,7 @@ _certificate_details(gpointer window,
     {
 		MAEMOSEC_DEBUG(1, "Failed to create infobox");
         hildon_banner_show_information (window, NULL, _("cert_error_open"));
-		gtk_widget_destroy(current_dialog);
-		if (current_dialog == cert_dialog)
-            {
-                cert_dialog = NULL;
-            } else {
-			cert_simple_dialog = NULL;
-		}
+		gtk_widget_destroy(cert_dialog);
         return FALSE;
     }
 
@@ -196,7 +155,7 @@ _certificate_details(gpointer window,
 
 
     /* Put infobox scroller to right place */
-	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(current_dialog)->vbox),
+	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(cert_dialog)->vbox),
 					  scroller);
 
 	gtk_container_add(GTK_CONTAINER(cert_main_page), scroller);
@@ -220,22 +179,23 @@ _certificate_details(gpointer window,
         }
     }
 
-    gtk_window_set_geometry_hints(GTK_WINDOW(current_dialog),
-                                  current_dialog, &hints,
+    gtk_window_set_geometry_hints(GTK_WINDOW(cert_dialog),
+                                  cert_dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
-    bn_delete = gtk_dialog_add_button(GTK_DIALOG(current_dialog),
-									  _("cert_bd_c_delete"), 
-									  GTK_RESPONSE_DELETE_EVENT);
+	if (MAEMOSEC_CERTMAN_DOMAIN_PRIVATE == domain_flags)
+		bn_delete = gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
+										  _("cert_bd_c_delete"), 
+										  GTK_RESPONSE_DELETE_EVENT);
 
     /* Add context sensitive help icon */
-    hildon_help_dialog_help_enable(GTK_DIALOG(current_dialog),
+    hildon_help_dialog_help_enable(GTK_DIALOG(cert_dialog),
                                 CM_HELP_KEY_DETAILS,
                                 osso_global);
 
     /* Show and run the dialog */
 	MAEMOSEC_DEBUG(1, "Showing details");
-    gtk_widget_show_all(current_dialog);
+    gtk_widget_show_all(cert_dialog);
 
     if (cert_notebook)
     {
@@ -245,7 +205,7 @@ _certificate_details(gpointer window,
     while (ret != CM_RESPONSE_CLOSE)
     {
         ULOG_DEBUG("Before gtk_dialog_run\n");
-        ret = gtk_dialog_run(GTK_DIALOG(current_dialog));
+        ret = gtk_dialog_run(GTK_DIALOG(cert_dialog));
         ULOG_DEBUG("After gtk_dialog_run\n");
 
         if (GTK_RESPONSE_DELETE_EVENT == ret) {
@@ -253,35 +213,25 @@ _certificate_details(gpointer window,
 			 * Delete certificate
 			 */
 			MAEMOSEC_DEBUG(1, "%s: Delete!", __func__);
-			
+			certificate_deleted = TRUE;
 			ret = CM_RESPONSE_CLOSE;
         }
     }
 
-    gtk_widget_hide_all(current_dialog);
+    gtk_widget_hide_all(cert_dialog);
 
     /* Scroller is always destroyed */
     gtk_widget_destroy(scroller);
     scroller = NULL; 
+	/* TODO: Infobox needs not to be destroyed? */
 	infobox = NULL;
 
     /* Save store and delete dialog, if they weren't initialized */
 
-    if (current_dialog == cert_dialog) 
-		cert_dialog = NULL;
-    else 
-		cert_simple_dialog = NULL;
-    gtk_widget_destroy(current_dialog);
-
-	if (current_dialog == cert_dialog)
-    {
-        cert_dialog = NULL;
-    } else {
-		cert_simple_dialog = NULL;
-	}
-	gtk_widget_destroy(current_dialog);
-	gtk_widget_destroy(bn_delete);
-    return certificate_installed;
+	gtk_widget_destroy(cert_dialog);
+	if (bn_delete)
+		gtk_widget_destroy(bn_delete);
+    return(certificate_deleted);
 }
 
 

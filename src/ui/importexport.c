@@ -9,6 +9,8 @@
    @author  Karoliina T. Salminen <karoliina.t.salminen@nokia.com>
 */
 
+#define _XOPEN_SOURCE
+
 #include <glib.h>
 #include <glib/gstdio.h>
 
@@ -852,129 +854,4 @@ _password_callback(gchar *buf, gint size, gint rwflag, void *u)
     gtk_widget_destroy(dialog);
 
     return (int)str_size;
-}
-
-
-static gboolean 
-_confirmation_dialog(gpointer window, 
-		     maemosec_key_id cert_id,
-		     X509* cert)
-{
-    gchar* str = NULL;
-    gboolean root = FALSE;
-    GtkWidget* label = NULL;
-    gchar* buf = NULL;
-    gint ret = 0;
-    GdkGeometry hints;
-
-    MAEMOSEC_DEBUG(1, "Enter %s", __func__);
-
-    /* Get root status of the certificate */
-    if (cert == NULL)
-    {
-#ifndef CST_DISABLE
-        cert = CST_get_cert(get_cst(), cert_id);
-#endif
-        if (cert == NULL)
-        {
-            /* Show unable to find certificate */
-        }
-    }
-#ifndef CST_DISABLE
-    root = CST_is_root(cert); /* CST_is_CA(cert); */
-    /* Get certificate name */
-    str = get_certificate_name(cert);
-#endif
-
-    /* Create confirmation dialog, with certificate details button */
-    if (!root)
-    {
-        import_dialog = gtk_dialog_new_with_buttons(
-            _("certman_ti_install_new_certificate_title"),
-            GTK_WINDOW(window),
-            GTK_DIALOG_MODAL
-            | GTK_DIALOG_DESTROY_WITH_PARENT
-            | GTK_DIALOG_NO_SEPARATOR,
-            NULL);
-
-        /* Add label to the dialog */
-        buf= g_strdup_printf(_("cert_nc_install_dialog"), str);
-
-        /* Add buttons to the dialog */
-        gtk_dialog_add_button(GTK_DIALOG(import_dialog),
-                              _("cert_bd_install_ok"),
-                              GTK_RESPONSE_OK);
-        gtk_dialog_add_button(GTK_DIALOG(import_dialog),
-                              _("cert_bd_install_details"),
-                              CM_RESPONSE_DETAILS);
-        gtk_dialog_add_button(GTK_DIALOG(import_dialog),
-                              _("cert_bd_install_cancel"),
-                              GTK_RESPONSE_CANCEL);
-    } else {
-        import_dialog = gtk_dialog_new_with_buttons(
-            _("certman_ti_install_new_authority_certificate_title"),
-            GTK_WINDOW(window),
-            GTK_DIALOG_MODAL
-            | GTK_DIALOG_DESTROY_WITH_PARENT
-            | GTK_DIALOG_NO_SEPARATOR,
-            NULL);
-
-        /* Add label to the dialog */
-        buf = g_strdup_printf(_("cert_nc_install_root_dialog"), str);
-
-        gtk_dialog_add_button(GTK_DIALOG(import_dialog),
-                              _("cert_bd_install_root_ok"),
-                              GTK_RESPONSE_OK);
-        gtk_dialog_add_button(GTK_DIALOG(import_dialog),
-                              _("cert_bd_install_root_details"),
-                              CM_RESPONSE_DETAILS);
-        gtk_dialog_add_button(GTK_DIALOG(import_dialog),
-                              _("cert_bd_install_root_cancel"),
-                              GTK_RESPONSE_CANCEL);
-    }
-
-    g_free(str);
-    str = NULL;
-
-    /* Create label */
-    label = gtk_label_new(buf);
-    g_free(buf);
-    buf = NULL;
-    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
-    gtk_container_add(GTK_CONTAINER(GTK_DIALOG(import_dialog)->vbox),
-                      label);
-
-    /* Set window geometry */
-    hints.min_width  = IMPORT_MIN_WIDTH;
-    hints.min_height = IMPORT_MIN_HEIGHT;
-    hints.max_width  = IMPORT_MAX_WIDTH;
-    hints.max_height = IMPORT_MAX_HEIGHT;
-
-    gtk_window_set_geometry_hints(GTK_WINDOW(import_dialog),
-                                  import_dialog, &hints,
-                                  GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
-
-    /* Run confirmation dialog */
-    gtk_widget_show_all(import_dialog);
-
-    ret = 0;
-    while(ret != GTK_RESPONSE_CANCEL &&
-          ret != GTK_RESPONSE_OK &&
-          ret != GTK_RESPONSE_DELETE_EVENT)
-    {
-        ret = gtk_dialog_run(GTK_DIALOG(import_dialog));
-
-        if (ret == CM_RESPONSE_DETAILS)
-        {
-			certmanui_simple_certificate_details_dialog(import_dialog,
-														cert);
-        }
-    }
-
-    /* Delete dialog */
-    gtk_widget_hide_all(import_dialog);
-    gtk_widget_destroy(import_dialog); 
-	import_dialog = NULL;
-
-    return (ret == GTK_RESPONSE_OK);
 }
