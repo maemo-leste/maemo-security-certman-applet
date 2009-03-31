@@ -48,7 +48,7 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.6.0)
 AC_SUBST(GLIB_LIBS)
 AC_SUBST(GLIB_CFLAGS)
                                                                                 
-PKG_CHECK_MODULES(OSSO, libosso >= 1.0.0 hildon-help >= 1.9.0)
+PKG_CHECK_MODULES(OSSO, libosso >= 1.0.0)
 AC_SUBST(OSSO_LIBS)
 AC_SUBST(OSSO_CFLAGS)
 

@@ -13,7 +13,6 @@
 #define __UIDEFS_H__
 
 #include <hildon/hildon.h>
-#include <hildon/hildon-help.h>
 
 /* Size for the main dialog */
 #define MIN_WIDTH               592

@@ -189,11 +189,6 @@ _certificate_details(gpointer window,
 										  _("cert_bd_c_delete"), 
 										  GTK_RESPONSE_APPLY);
 
-    /* Add context sensitive help icon */
-    hildon_help_dialog_help_enable(GTK_DIALOG(cert_dialog),
-                                CM_HELP_KEY_DETAILS,
-                                osso_global);
-
     /* Show and run the dialog */
 	MAEMOSEC_DEBUG(1, "Showing details");
     gtk_widget_show_all(cert_dialog);
