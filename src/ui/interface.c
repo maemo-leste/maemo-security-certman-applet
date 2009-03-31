@@ -124,7 +124,7 @@ ui_create_main_dialog(gpointer window)
                      cert_list_store);
 
 	MAEMOSEC_DEBUG(1, "Populate user certificates");
-	_add_row_header(cert_list_store, "User");
+	_add_row_header(cert_list_store, _("cert_ti_main_notebook_user"));
 	domain_flags = MAEMOSEC_CERTMAN_DOMAIN_PRIVATE;
 	rc = maemosec_certman_iterate_domains(MAEMOSEC_CERTMAN_DOMAIN_PRIVATE,
 										  _populate_certificates,
@@ -132,7 +132,7 @@ ui_create_main_dialog(gpointer window)
 
 
 	MAEMOSEC_DEBUG(1, "Populate root certificates");
-	_add_row_header(cert_list_store, "Authorities");
+	_add_row_header(cert_list_store, _("cert_ti_main_notebook_authorities"));
 	domain_flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
 	rc = maemosec_certman_iterate_domains(MAEMOSEC_CERTMAN_DOMAIN_SHARED,
 										  _populate_certificates,
@@ -436,7 +436,7 @@ _create_certificate_list(GtkWidget** scroller,
     renderer = gtk_cell_renderer_text_new();
 
     column = gtk_tree_view_column_new_with_attributes 
-		(NULL, // _("cert_li_no_certificates_issuedto"),
+		(NULL,
 		 renderer,
         "text", 
 		 MAIN_NAME_COL,
@@ -453,7 +453,7 @@ _create_certificate_list(GtkWidget** scroller,
 
     /* Certificate purpose column */
 	column = gtk_tree_view_column_new_with_attributes 
-		(_("cert_li_no_certificates_purpose"),
+		(NULL,
 		 renderer,
 		 "text", 
 		 MAIN_PURPOSE_COL,

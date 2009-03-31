@@ -2,7 +2,7 @@
 /**
    @file importexport.c
 
-   Importing and exporting dialogs.
+   Importingnd exporting dialogs.
    <p>
    Copyright (c) 2005 Nokia. All rights reserved.
 
@@ -196,8 +196,8 @@ _get_private_key(gpointer window, X509* certificate,
                                            _("cert_ti_key_password"),
 										   "",
                                            _("cert_ia_password"),
-                                           "Done", // _("[wdgt_bd_done]"),
-                                           _("cert_bd_enter_password_cancel"),
+                                           dgettext("hildon-libs", "wdgt_bd_done"),
+                                           "",
                                            &pk_pwd_entry,
                                            FALSE, 0);
 
@@ -302,8 +302,8 @@ ask_password(gpointer window, int test_password(void* data, gchar* pwd), void* d
 		_("cert_ti_enter_file_password"),
 		temp = g_strdup_printf(_("cert_ia_explain_file_password"), info),
 		_("cert_ia_password"),
-		"Done", // _("[wdgt_bd_done]"),
-		_("cert_bd_enter_password_cancel"),
+		dgettext("hildon-libs", "wdgt_bd_done"),
+		"",
 		&passwd_entry,
 		FALSE, 
 		0);
@@ -377,7 +377,7 @@ ask_domains(gpointer window,
 	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), label);
 
     bn_ok = gtk_dialog_add_button(GTK_DIALOG(*dialog),
-								  "Done", 
+								  dgettext("hildon-libs", "wdgt_bd_done"),
 								  GTK_RESPONSE_OK);
 
 	hints.min_width  = PASSWD_MIN_WIDTH;
@@ -792,7 +792,46 @@ certmanui_import_file(gpointer window, const gchar* fileuri,
 				}
 				gtk_dialog_run(GTK_DIALOG(dialog));
 			}
+
 			// TODO: Error from invalid PKCS#12 file
+		} else if (   0 == strcmp(filetype, "X509-PEM")
+				   || 0 == strcmp(filetype, "X509-DER")) 
+		{
+
+			GtkWidget* dialog = NULL;
+			domain_handle cdom;
+			int rc;
+			X509 *cert = (X509*) idata;
+			rc = ask_domains(window, &dialog, cert, NULL, NULL, &user_domain, &ca_domain);
+			if (NULL == dialog)
+				goto certmanui_import_file_cleanup;
+
+			if (GTK_RESPONSE_OK == rc) {
+				
+				rc = maemosec_certman_open_domain
+					(user_domain,
+					 MAEMOSEC_CERTMAN_DOMAIN_PRIVATE,
+					 &cdom);
+				if (0 == rc) {
+					maemosec_certman_add_cert(cdom, cert);
+					maemosec_certman_close_domain(cdom);
+					MAEMOSEC_DEBUG(1, "Certificates installed OK");
+					hildon_banner_show_information (dialog,
+													NULL, 
+													"Certificates installed");
+				} else {
+					hildon_banner_show_information (dialog,
+													NULL, 
+													"Installation cancelled");
+				}
+				/*
+				 * Close the dialog in two seconds
+				 */
+				rc = gtk_timeout_add(2000, close_import_dialog, dialog);
+				gtk_dialog_run(GTK_DIALOG(dialog));
+				X509_free(cert);
+				cert = NULL;
+			}
 		}
 	}
 
@@ -831,8 +870,8 @@ _password_callback(gchar *buf, gint size, gint rwflag, void *u)
                                     _("cert_ti_enter_password"),
 									"",
                                     _("cert_ia_password"),
-                                    _("cert_bd_enter_password_ok"),
-                                    _("cert_bd_enter_password_cancel"),
+                                    "OK", // [wdgt_bd_done]
+                                    "",
                                     &entry,
                                     FALSE, 0);
 

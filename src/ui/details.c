@@ -114,7 +114,7 @@ _certificate_details(gpointer window,
 
     if (osso_global == NULL)
     {
-        ULOG_CRIT("osso_global is NULL");
+        MAEMOSEC_ERROR("osso_global is NULL");
         return FALSE;
     }
 
@@ -130,7 +130,8 @@ _certificate_details(gpointer window,
 			 | GTK_DIALOG_NO_SEPARATOR,
 			 NULL);
 
-		if (cert_dialog == NULL)	{
+		if (cert_dialog == NULL) {
+			MAEMOSEC_ERROR("Failed to create dialog");
 			return FALSE;
 		}
 
@@ -232,6 +233,17 @@ _certificate_details(gpointer window,
 	if (bn_delete)
 		gtk_widget_destroy(bn_delete);
     return(certificate_deleted);
+}
+
+gboolean 
+certmanui_install_certificate_details_dialog(gpointer window,
+											 X509* cert)
+{
+	MAEMOSEC_DEBUG(1, "Called certmanui_install_certificate_details_dialog");
+	_certificate_details(window, 
+						 MAEMOSEC_CERTMAN_DOMAIN_SHARED,
+						 cert);
+	return(FALSE);
 }
 
 
@@ -439,9 +451,11 @@ ASN1_time_to_localtime_str(ASN1_TIME* atime, char* to_buf, const unsigned buf_si
 	res = mktime(&r);
 	if ((time_t)-1 != res) {
 		struct tm ltm;
+		const char* format;
 		res -= timezone;
 		localtime_r(&res, &ltm);
-		strftime(to_buf, buf_size, "%X %x %z", &ltm);
+		format = dgettext("hildon-libs", "wdgt_va_date_long");
+		strftime(to_buf, buf_size, format, &ltm);
 		MAEMOSEC_DEBUG(1, "%s", to_buf);
 		return(1);
 	}
@@ -509,8 +523,7 @@ _create_infobox(X509* cert)
 			_add_labels(GTK_TABLE(infobox),
 						&row, 
 						_("cert_fi_certmang_issued_by"), 
-						/* TODO: This string is missing from NLS */
-						"(self-signed)",
+						_("cert_fi_certmang_self_signed"),
 						TRUE);
 		} else {
 			add_full_name(infobox, 

@@ -1,3 +1,14 @@
+maemo-security-certman-applet (0.0.5) unstable; urgency=low
+
+  * Added the functions needed by tablet-browser-ui and microb-eal 
+    packages. Also
+    - Changed to use the proper date format string.
+    - Updated desktop file. Fixes: NB#106294
+    - Dropped libhildonhelp-dependency. Fixes: NB#105268
+    - No more crash when an unrecognized file URL is sent. Fixes: NB#105971
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Tue, 31 Mar 2009 16:40:00 +0200
+
 maemo-security-certman-applet (0.0.4) unstable; urgency=low
 
   * Made the UI to comply more closely Fremantle standards. Also

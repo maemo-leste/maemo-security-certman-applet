@@ -16,11 +16,13 @@
 #include <hildon/hildon.h>
 
 #include <unistd.h>
+#include <maemosec_common.h>
 
 #include "i18n.h"
 #include "osso-applet-certman.h"
 #include "uiutils.h"
 #include "uidefs.h"
+
 
 /* Local interface */
 
@@ -48,13 +50,14 @@ static void _infonote_dialog_response(GtkDialog* dialog,
  */
 
 gboolean 
-certmanui_certificate_expired_with_name(
-    gpointer window,
-    CertmanUIExpiredDialogType type,
-    const gchar* cert_name,
-    CertificateExpiredResponseFunc callback,
-    gpointer user_data)
-{
+certmanui_certificate_expired_with_name
+(
+ gpointer window,
+ CertmanUIExpiredDialogType type,
+ const gchar* cert_name,
+ CertificateExpiredResponseFunc callback,
+ gpointer user_data
+) {
     gint response_id = 0;
     GtkWidget* expired_dialog = NULL;
     GtkWidget* expired_label = NULL;
@@ -69,17 +72,22 @@ certmanui_certificate_expired_with_name(
 		 */
         if (callback != NULL) 
 			callback(TRUE, user_data);
-        return TRUE;
+		MAEMOSEC_DEBUG(1, "%s: <null>", __func__);
+		return(TRUE);
     }
 
+	MAEMOSEC_DEBUG(1, "%s: %s", __func__, cert_name);
+
     expired_dialog = gtk_dialog_new_with_buttons
-		(_("certman_ti_certificate_expired"),
+		(
+		 _("cert_nc_expired"),
 		 GTK_WINDOW(window),
 		 GTK_DIALOG_MODAL
 		 | GTK_DIALOG_DESTROY_WITH_PARENT
 		 | GTK_DIALOG_NO_SEPARATOR,
 		 NULL);
 
+#if 0
     switch(type) {
 		case CERTMANUI_EXPIRED_DIALOG_EXPIRED:
 			buf = g_strdup_printf(_("cert_nc_expired"), cert_name);
@@ -95,18 +103,17 @@ certmanui_certificate_expired_with_name(
     expired_label = gtk_label_new(buf);
     g_free(buf);
     buf = NULL;
+#else
+	expired_label = gtk_label_new(cert_name);
+#endif
     gtk_label_set_line_wrap(GTK_LABEL(expired_label), TRUE);
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(expired_dialog)->vbox),
                       expired_label);
 
     /* Add buttons to the dialog */
     gtk_dialog_add_button(GTK_DIALOG(expired_dialog),
-                          _("cert_bd_expired_ok"),
+                          dgettext("hildon-libs", "wdgt_bd_done"),
                           GTK_RESPONSE_OK);
-
-    gtk_dialog_add_button(GTK_DIALOG(expired_dialog),
-                          _("cert_bd_expired_cancel"),
-                          GTK_RESPONSE_CANCEL);
 
     gtk_widget_show_all(expired_dialog);
 
@@ -143,14 +150,16 @@ certmanui_certificate_expired_with_name(
  */
 
 gboolean 
-certmanui_show_error_with_name_and_serial(gpointer window,
-										  CertmanUIErrorType type,
-										  const gchar* cert_name,
-										  const gchar* cert_serial,
-										  gpointer param,
-										  CertificateExpiredResponseFunc callback,
-										  gpointer user_data)
-{
+certmanui_show_error_with_name_and_serial
+(
+ gpointer window,
+ CertmanUIErrorType type,
+ const gchar* cert_name,
+ const gchar* cert_serial,
+ gpointer param,
+ CertificateExpiredResponseFunc callback,
+ gpointer user_data
+) {
     gchar* use = NULL;
     GtkWidget* note = NULL;
     static CallbackParameter params;
@@ -161,22 +170,15 @@ certmanui_show_error_with_name_and_serial(gpointer window,
         ULOG_ERR("No certificate name or serial supplied");
         if (callback != NULL) 
 			callback(TRUE, user_data);
-        return TRUE;
+		MAEMOSEC_DEBUG(1, "%s: <null>", __func__);
+        return(TRUE);
     }
+
+	MAEMOSEC_DEBUG(1, "%s: %s", __func__, cert_name);
 
     /* Select string according to error type */
     switch(type)
 		{
-		case CERTMANUI_ERROR_NO_LONGER_TRUSTED:
-			use = (gchar*)param;
-			if (use != NULL) {
-				use = _(use);
-				buf = g_strdup_printf
-					(_("cert_error_no_longer_trusted"),
-					 cert_name, use);
-			}
-			break;
-
 		case CERTMANUI_ERROR_NOT_VALID_SERVER_CERT:
 			buf = g_strdup_printf
 				(_("cert_error_not_valid_server_certificate"),
@@ -189,10 +191,8 @@ certmanui_show_error_with_name_and_serial(gpointer window,
 				 cert_name, cert_serial);
 			break;
 
-		case CERTMANUI_ERROR_UNABLE_TO_SAVE:
-			buf = g_strdup_printf
-				(_("cert_error_unable_to_save"),
-				 cert_name, cert_serial);
+		default:
+			buf = "";
 			break;
     }
 

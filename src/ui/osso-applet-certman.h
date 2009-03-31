@@ -49,6 +49,10 @@ extern "C" {
         CERTMANUI_ERROR_UNABLE_TO_SAVE,
     } CertmanUIErrorType;
 
+	gboolean certmanui_init(osso_context_t *osso_ext);
+
+	gboolean certmanui_deinit(void);
+
 /**
    Represents a details dialog in the UI. Blocks until this dialog
    is dismissed.
@@ -85,6 +89,21 @@ extern "C" {
 						  const gchar* fileuri,
 						  maemosec_key_id* cert_id, 
 						  GSList **pk12_list);
+
+/**
+   Show a details dialog for unknown certificate (not in the store).
+   Also install button is presented for installing the given
+   certificate. Blocks, until the dialog is dismissed.
+
+   @param window        Parent window for the dialog.
+   @param cert          Unknown certificate.
+
+   @return TRUE, if user decided to install the certificate and the
+   installation was succesful.
+*/
+    gboolean 
+	certmanui_install_certificate_details_dialog(gpointer window,
+												 X509* cert);
 
 /**
    Represent UI for deleting the given certificate.

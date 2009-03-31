@@ -2,11 +2,6 @@
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
    <mime-type type="application/x-osso-applet-certman">
      <comment>Certificate file</comment>
-     <glob pattern="*.crt"/>
-     <glob pattern="*.der"/>
-     <glob pattern="*.pem"/>
-     <glob pattern="*.p12"/>
-     <glob pattern="*.pfx"/>
      <glob pattern="*.CRT"/>
      <glob pattern="*.DER"/>
      <glob pattern="*.PEM"/>
@@ -18,7 +13,7 @@
      <glob pattern="*.cRt"/>
      <glob pattern="*.cRT"/>
      <glob pattern="*.crT"/>
-     <glob pattern="*.cer"/>
      <glob pattern="*.CER"/>
+     <generic-icon name="package-x-generic"/>
    </mime-type>
 </mime-info>

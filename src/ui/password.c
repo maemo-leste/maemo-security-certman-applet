@@ -110,32 +110,6 @@ certmanui_get_privatekey(gpointer window,
 	maemosec_certman_key_id_to_str(cert_id, key_id_str, sizeof(key_id_str));
 	MAEMOSEC_DEBUG(1, "%s for %s", __func__, key_id_str);
 
-#if 0
-	rc = maemosec_certman_load_cert(cert_id, &cert, NULL);
-
-    /* Get certificate for the given ID, and throw error, if not found */
-    if (cert == NULL)
-    {
-        /* Certificate not found banner */
-        ULOG_ERR("Unable to get certificate #%s", key_id_str);
-        hildon_banner_show_information (window, NULL, _("cert_error_cert_notfound"));
-        if (callback != NULL) callback(cert_id, NULL, NULL,
-                                       user_data);
-        return NULL;
-    }
-
-    /* Test that certificate has key */
-    if (0 != rc)
-    {
-        /* Certificate doesn't have a key, give error and return */
-        ULOG_ERR("Certificate #%s doesn't have a key", key_id_str);
-        hildon_banner_show_information (window, NULL, _("cert_error_key_notfound"));
-        if (callback != NULL) callback(cert_id, NULL, NULL,
-                                       user_data);
-        return NULL;
-    }
-#endif
-
     /* Fill in params struct */
     params.got_key = NULL;
     memcpy(params.cert_id, cert_id, sizeof(params.cert_id));
@@ -148,8 +122,8 @@ certmanui_get_privatekey(gpointer window,
                                                  _("cert_ti_enter_password"),
 												 "",
                                                  _("cert_ia_password"),
-                                                 _("cert_bd_enter_password_ok"),
-                                                 _("cert_bd_enter_password_cancel"),
+                                                 "OK", // [wdgt_bd_done]
+                                                 "",
                                                  &params.passwd_entry,
                                                  FALSE, 1);
     gtk_widget_show_all(enter_passwd_dialog);

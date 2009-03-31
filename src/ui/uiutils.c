@@ -21,6 +21,7 @@
 
 #include "uiutils.h"
 #include "uidefs.h"
+#include "osso-applet-certman.h"
 
 /*
  * Mapping to purposes from domain names
@@ -436,3 +437,23 @@ pick_name_components_by_NIDS(X509_NAME* of_name,
 		}
 	}
 }
+
+
+gboolean 
+certmanui_init(osso_context_t *osso_ext) 
+{
+	osso_global = osso_ext;
+	MAEMOSEC_DEBUG(1, "%s => %p", __func__, osso_ext);
+	return(TRUE);
+}
+
+
+gboolean 
+certmanui_deinit(void) 
+{
+	osso_global = NULL;
+	MAEMOSEC_DEBUG(1, "%s", __func__);
+	maemosec_certman_close(NULL);
+    return(TRUE);
+}
+
