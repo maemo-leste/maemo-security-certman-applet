@@ -1,3 +1,9 @@
+maemo-security-certman-applet (0.0.6) unstable; urgency=low
+
+  * In development
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 17 Apr 2009 16:40:00 +0200
+
 maemo-security-certman-applet (0.0.5) unstable; urgency=low
 
   * Added the functions needed by tablet-browser-ui and microb-eal 
