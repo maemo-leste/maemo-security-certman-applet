@@ -2,13 +2,20 @@ SUBDIRS = src mime etc
 
 EXTRA_DIST = \
 	debian/* \
-	src/cfg/maemosec_certman_applet.desktop.in \
-	src/cfg/maemosec_certman_mimehandler.desktop.in \
-	src/cfg/maemosec_certman.service.in \
+	cfg/maemosec_certman_applet.desktop.in \
+	cfg/maemosec_certman_mimehandler.desktop.in \
+	cfg/maemosec_certman.service.in \
 	pkgconfig/maemosec-certman-applet.pc.in
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = pkgconfig/maemosec-certman-applet.pc
+
+hildoncpdesktopentry_DATA = cfg/maemosec_certman_applet.desktop
+
+hildondesktopentry_DATA = cfg/maemosec_certman_mimehandler.desktop
+
+servicefiledir=$(datadir)/dbus-1/services
+servicefile_DATA = cfg/maemosec_certman.service
 
 DISTCLEANFILES = \
 	aclocal.m4 \

@@ -1,4 +1,5 @@
 AC_INIT([maemo-security-certman-applet], 0.0.6)
+
 # Initialize automake
 AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
 AC_CONFIG_HEADERS(config.h)
@@ -7,7 +8,7 @@ LIBRARY_VERSION=0
 AC_SUBST(LIBRARY_VERSION)
 
 # Tests that source dir exists
-AC_CONFIG_SRCDIR([src/applet_start.c])
+AC_CONFIG_SRCDIR([src/applet_main.c])
 
 # For automake: generate rules to reproduce config.h, if needed
 
@@ -113,9 +114,9 @@ AC_SUBST(dbusconfdir)
 AC_SUBST(dbusservdir)
 
 AC_CONFIG_FILES(pkgconfig/maemosec-certman-applet.pc:pkgconfig/maemosec-certman-applet.pc.in)
-AC_CONFIG_FILES(src/cfg/maemosec_certman_applet.desktop:src/cfg/maemosec_certman_applet.desktop.in)
-AC_CONFIG_FILES(src/cfg/maemosec_certman_mimehandler.desktop:src/cfg/maemosec_certman_mimehandler.desktop.in)
-AC_CONFIG_FILES(src/cfg/maemosec_certman.service:src/cfg/maemosec_certman.service.in)
+AC_CONFIG_FILES(cfg/maemosec_certman_applet.desktop:cfg/maemosec_certman_applet.desktop.in)
+AC_CONFIG_FILES(cfg/maemosec_certman_mimehandler.desktop:cfg/maemosec_certman_mimehandler.desktop.in)
+AC_CONFIG_FILES(cfg/maemosec_certman.service:cfg/maemosec_certman.service.in)
 AC_CONFIG_FILES(etc/maemosec_certman.schemas:etc/maemosec_certman.schemas.in)
 
 AC_PROG_MAKE_SET
