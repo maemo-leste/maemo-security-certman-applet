@@ -4,8 +4,7 @@
 INCLUDES = $(HILDON_CFLAGS) -DLOCALEDIR=\"$(localedir)\" \
         $(OSSO_CFLAGS)  -DPREFIX=\"$(prefix)\" -DBIN_DIR=\"$(bindir)\" \
 	$(GCONF_CFLAGS) $(OPENSSL_CFLAGS) $(MAEMOSEC_FLAGS) \
-	$(X_CFLAGS)
-
+	$(X_CFLAGS) $(GNOME_VFS_CFLAGS)
 
 bin_PROGRAMS = maemosec_certman_service
 

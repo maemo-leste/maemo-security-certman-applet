@@ -6,6 +6,7 @@ Version=1.0
 Name=cema_ap_application_title
 Comment=CM services registrator
 Exec=@prefix@/bin/maemosec_certman_service
+Icon=general_certificatemanager
 MimeType=application/x-x509-ca-cert;application/x-pkcs12;application/x-osso-applet-certman
 X-Osso-Service=com.nokia.certman
 X-Text-Domain=osso-applet-certman

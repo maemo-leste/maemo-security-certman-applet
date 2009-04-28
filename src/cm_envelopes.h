@@ -16,10 +16,10 @@ typedef enum {
 const char*
 determine_filetype(FILE* fp, void** idata);
 
-int 
+gboolean
 extract_envelope(gpointer window,
-		 void* idata,
-		 const char* filetype,
+		 const char* fileuri,
 		 STACK_OF(X509) **certs,
-		 EVP_PKEY **pkey);
+		 EVP_PKEY **pkey,
+		 gchar** password);
 #endif

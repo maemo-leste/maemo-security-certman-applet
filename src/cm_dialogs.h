@@ -3,8 +3,6 @@
 #ifndef CM_DIALOGS_H
 #define CM_DIALOGS_H
 
-#include <time.h>
-
 #include <gtk/gtk.h>
 #define __HILDON_REMOTE_TEXTURE_H__
 #include <hildon/hildon.h>
@@ -50,17 +48,6 @@ typedef enum
     CM_RESPONSE_INSTALL
 } CMResponseType;
 
-/* Certificate list colums */
-enum {
-    MAIN_NAME_COL = 0,
-    MAIN_PURPOSE_COL,
-    MAIN_ID_COL,
-    MAIN_DOMAIN_COL,
-    MAIN_DOM_TYPE_COL,
-    MAIN_CONTENT_COL,
-    MAIN_NUM_COLUMNS
-};
-
 GtkWidget* 
 ui_create_main_dialog(gpointer window) ;
 
@@ -68,6 +55,9 @@ gchar*
 ask_password(gpointer window, 
 	     int test_password(void* data, gchar* pwd), 
 	     void* data, 
-	     gchar* info);
+	     const char* info);
+
+int
+report_openssl_error(const char* str, size_t len, void* u);
 
 #endif

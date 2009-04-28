@@ -9,7 +9,7 @@ Standards-Version: 3.7.2
 Package: maemosec-certman-applet
 Section: libs
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, hildon-control-panel (>= 1.0.0), osso-icons, ke-recv-l10n-mr | ke-recv-l10n-mr0, osso-applet-certman-l10n-mr | osso-applet-certman-l10n-mr0
+Depends: ${shlibs:Depends}, hildon-control-panel (>= 1.0.0), osso-icons, ke-recv-l10n-mr | ke-recv-l10n-mr0, osso-applet-certman-l10n-mr | osso-applet-certman-l10n-mr0
 Description: Control Panel Certificate Manager plugin
  Certificate Manager for Control Panel.
 
@@ -23,7 +23,7 @@ Description: Debug symbols for the control panel certificate manager plugin
 Package: libmaemosec-certman-applet0
 Section: libs
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, hildon-control-panel (>= 1.0.0), osso-icons, ke-recv-l10n-mr | ke-recv-l10n-mr0, osso-applet-certman-l10n-mr | osso-applet-certman-l10n-mr0
+Depends: ${shlibs:Depends}, hildon-control-panel (>= 1.0.0), osso-icons, ke-recv-l10n-mr | ke-recv-l10n-mr0, osso-applet-certman-l10n-mr | osso-applet-certman-l10n-mr0
 Description: Certificate manager external UI library.
  Certificate manager external UI library.
 

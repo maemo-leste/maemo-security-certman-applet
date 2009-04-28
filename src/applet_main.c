@@ -5,7 +5,7 @@
 #include <gtk/gtk.h>
 
 #include <libosso.h>
-#include <osso-log.h>
+// #include <osso-log.h>
 
 #include <assert.h>
 #include <string.h>
@@ -51,20 +51,23 @@ execute(osso_context_t * osso,
     gint ret = -1, tret = 0;
 
     MAEMOSEC_DEBUG(1, "Enter %s", __func__);
-	ULOG_CRIT_L("ULOG_CRIT_L works?");
 
-    ret = bindtextdomain(LANGDOMAIN, LOCALEDIR);
-    MAEMOSEC_DEBUG(1, "bindtextdomain('%s','%s') returns %d",
-				   LANGDOMAIN, LOCALEDIR, ret);
+    // setlocale(LC_ALL, "");
+    bindtextdomain(LANGDOMAIN, LOCALEDIR);
+    // bind_textdomain_codeset(LANGDOMAIN, "UTF-8");
+    // textdomain(LANGDOMAIN);
+
+	ERR_print_errors_cb(report_openssl_error, NULL);
 
     /* Get configuration from SettingsInternalize */
 
     if (osso == NULL) {
-        ULOG_CRIT("Applet execute() called with NULL osso context.. aborting");
+        MAEMOSEC_ERROR("Applet execute() called with NULL osso context.. aborting");
         return OSSO_ERROR;
     }
     
-    MAEMOSEC_DEBUG(1, "About to set osso_global");
+    MAEMOSEC_DEBUG(1, "Osso context %p, data %p, user_activated=%s", 
+				   osso, data, user_activated?"yes":"no");
 	osso_global = osso;
 
 	ret = maemosec_certman_open(&root_store);
@@ -86,11 +89,9 @@ execute(osso_context_t * osso,
 
     if (main_dialog == NULL)
     {
-        ULOG_CRIT_L("Unable to create applet dialog, exiting..");
+        MAEMOSEC_ERROR("Unable to create applet dialog, exiting..");
         return OSSO_ERROR;
     }
-
-    ui_refresh();
 
     /* Run dialog */
     while (ret != CM_RESPONSE_CLOSE &&
@@ -105,7 +106,7 @@ execute(osso_context_t * osso,
     if (ret == CM_RESPONSE_CLOSE)
     {
         if (tret == OSSO_ERROR) {
-            ULOG_CRIT_L("Unable to save configuration..");
+            MAEMOSEC_ERROR("Unable to save configuration..");
         }
     }
 
@@ -130,7 +131,9 @@ static void _quit(gpointer dialog)
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
     if (dialog != NULL)
     {
-        ui_destroy();
+		gtk_widget_hide_all(dialog);
+		gtk_widget_destroy(dialog);
+        // ui_destroy();
     }
 
     /* Destroy SettingsDatabase */

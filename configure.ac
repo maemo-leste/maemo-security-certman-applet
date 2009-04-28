@@ -32,7 +32,8 @@ AC_HEADER_STDBOOL
 # certificate manager engine doesn't compile with stricter options, loose 
 # them
 #CFLAGS="$CFLAGS -Wall -Wno-format-y2k -ansi -Wmissing-prototypes -Wmissing-declarations -Werror -std=c99 -DDEBUG"
-CFLAGS="$CFLAGS -Wall -Wno-format-y2k -ansi -Wmissing-prototypes -Wmissing-declarations -std=c99 -DDEBUG"
+CFLAGS="$CFLAGS -Wall -Wno-format-y2k -ansi -Wmissing-prototypes \
+-Wmissing-declarations -std=c99 -DDEBUG -D_REENTRANT"
 AC_SUBST(CFLAGS)
                                                                                 
 PKG_CHECK_MODULES(GTK, gtk+-2.0 >= 2.4.0)
@@ -57,9 +58,9 @@ PKG_CHECK_MODULES(HILDON, hildon-1 >= 1.0.0 hildon-control-panel >= 0.10.0 hildo
 AC_SUBST(HILDON_LIBS)
 AC_SUBST(HILDON_CFLAGS)
                                                                                 
-PKG_CHECK_MODULES(GCONF, gconf-2.0 >= 2.6)
-AC_SUBST(GCONF_CFLAGS)
-AC_SUBST(GCONF_LIBS)
+dnl PKG_CHECK_MODULES(GCONF, gconf-2.0 >= 2.6)
+dnl AC_SUBST(GCONF_CFLAGS)
+dnl AC_SUBST(GCONF_LIBS)
 
 PKG_CHECK_MODULES(GNOME_VFS, gnome-vfs-2.0 >= 2.6 gnome-vfs-module-2.0 >= 2.6)
 AC_SUBST(GNOME_VFS_CFLAGS)
@@ -79,7 +80,7 @@ localedir=`pkg-config osso-af-settings --variable=localedir`
 # Localisation-related
 GETTEXT_PACKAGE=$PACKAGE
 AC_SUBST(GETTEXT_PACKAGE)
-AM_GLIB_GNU_GETTEXT
+# AM_GLIB_GNU_GETTEXT
 
 AC_PATH_XTRA
 

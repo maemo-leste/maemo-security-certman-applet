@@ -10,7 +10,8 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
 #include <glib/gprintf.h>
-#include <gconf/gconf-client.h>
+#include <openssl/err.h>
+// #include <gconf/gconf-client.h>
 
 #include <X11/Xlib.h>
 #include <X11/X.h>
@@ -19,7 +20,7 @@
 #include <stdio.h>
 #include <libosso.h>
 #include <hildon/hildon.h>
-#include <osso-log.h>
+// #include <osso-log.h>
 
 #include <assert.h>
 #include <libintl.h>
@@ -27,7 +28,10 @@
 #include <unistd.h>
 #include <string.h>
 
+#include <maemosec_common.h>
+
 #include "osso-applet-certman.h"
+#include "cm_dialogs.h"
 #include "i18n.h"
 
 static Window _get_window_property(Window xwindow, Atom atom);
@@ -42,10 +46,8 @@ GtkWidget *top_aux = NULL;
 
 /* Display *dpy = NULL;  */
 
-static gboolean import_called = FALSE;
 osso_context_t *osso_g = NULL;
 
-gboolean _import_file_stub(void);
 gboolean _quit_clean(gpointer pointer);
 
 #define OSSO_CM_SERVICE "com.nokia.certman"
@@ -158,7 +160,7 @@ gint dbus_req_handler(const gchar *interface, const gchar *method,
                       GArray *arguments, gpointer data,
                       osso_rpc_t *retval)
 {
-    (void) interface;
+    MAEMOSEC_DEBUG(1, "%s: %s", __func__, interface);
     return dbus_message_handler(method, arguments, data, retval);
 }
 
@@ -187,39 +189,24 @@ gint dbus_message_handler(const gchar *method, GArray *arguments,
     if (g_ascii_strcasecmp(method, DBUS_METHOD_MIME_OPEN) == 0) {
         MAEMOSEC_DEBUG(1, "Got method 'mime_open' with method '%s'",
                    DBUS_METHOD_MIME_OPEN);
+
         if ( (val.type == DBUS_TYPE_STRING)
-             && (val.value.s != NULL) ) {
-
-
+             && (val.value.s != NULL) ) 
+		{
             fileuri = g_strdup(val.value.s);
-            MAEMOSEC_DEBUG(1, "fileuri came with mime_open request = \"%s\"",
-                       fileuri);
-
-
-            _import_file_stub();
-
+            MAEMOSEC_DEBUG(1, "%s: mime_open '%s'", __func__, fileuri);
             certmanui_import_file(GTK_WINDOW(top_aux), fileuri, NULL, NULL);
-
             g_free(fileuri);
-
             gtk_main_quit();
-
-            /*
-              guint timeout;
-              timeout = g_timeout_add(1000, _quit_clean, top_aux);
-              g_signal_connect(top_aux, "delete_event",
-              G_CALLBACK(g_source_remove),
-              GUINT_TO_POINTER(timeout));
-            */
             retval->type = DBUS_TYPE_BOOLEAN;
             retval->value.b = TRUE;
             return OSSO_OK;
         }
 
     } else {
+		MAEMOSEC_ERROR("Unknown dbus method '%s'", method);
     }
-
-    return DBUS_TYPE_INVALID;
+    return(DBUS_TYPE_INVALID);
 }
 
 
@@ -249,87 +236,37 @@ osso_return_t osso_rpc_cb(const gchar *interface,
                           gpointer data,
                           osso_rpc_t *retval)
 {
-    (void) interface;
-
     gchar *fileuri = NULL;
-    gchar buf[128];
-    guint cert_id = 0;
-    GSList *new_certs = NULL, *node = NULL;
-    GConfClient *client;
-
     osso_rpc_t val = g_array_index(args, osso_rpc_t, 0);
 
-    (void) args;
     g_assert(method);
 
-    MAEMOSEC_DEBUG(1, "dbus: method '%s' called", method);
+    MAEMOSEC_DEBUG(1, "%s: '%s:%s'", __func__, interface, method);
 
     /* Catch the message and define what you want to do with it */
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_TOP_APPLICATION) == 0) {
-
-        MAEMOSEC_DEBUG(1, "Got dbus message with method '%s'",
-                   DBUS_METHOD_TOP_APPLICATION);
         gtk_window_present(GTK_WINDOW(top_aux));
         return OSSO_OK;
     }
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_MIME_OPEN) == 0) {
 
-        MAEMOSEC_DEBUG(1, "Got dbus message with method '%s'",
-                   DBUS_METHOD_MIME_OPEN);
         if ( (val.type == DBUS_TYPE_STRING)
-             && (val.value.s != NULL) ) {
+             && (val.value.s != NULL) ) 
+		{
             fileuri = g_strdup(val.value.s);
             MAEMOSEC_DEBUG(1, "fileuri came with mime_open request = \"%s\"",
                        fileuri);
 
-            if (import_called == FALSE) {
-                import_called = TRUE;
-                _import_file_stub();
+			if (!certmanui_import_file(NULL, fileuri, NULL, NULL)) {
+				MAEMOSEC_ERROR("Importing certificate failed");
+				g_main_loop_quit(mainloop);
+				g_free(fileuri);
+				return OSSO_ERROR;
+			}
+			MAEMOSEC_DEBUG(1, "Imported");
 
-                if (!certmanui_import_file(NULL, fileuri, &cert_id, &new_certs)) {
-                    ULOG_ERR("Importing certificate failed");
-                    g_main_loop_quit(mainloop);
-                    g_free(fileuri);
-                    return OSSO_ERROR;
-                }
-                if (new_certs != NULL || cert_id != 0) {
-
-                    MAEMOSEC_DEBUG(1, "The following new cids came:");
-                    for (node = new_certs; node; node = node->next) {
-                        MAEMOSEC_DEBUG(1, "cid = %d", *(guint *)node->data);
-                        g_sprintf(buf, "%d", *(guint *)node->data);
-                        node->data = g_strndup(buf, strlen(buf));
-
-                    }
-                    if (cert_id != 0) {
-                        MAEMOSEC_DEBUG(1, "Got new cert_id = %d", (guint)cert_id);
-                        g_sprintf(buf, "%d", cert_id);
-                        new_certs = g_slist_prepend(new_certs, g_strndup(buf, strlen(buf)));
-                    }
-
-                    g_type_init();
-                    client = gconf_client_get_default();
-                    if (client == NULL) {
-                        ULOG_ERR("Unable to get GConf client.");
-                        /* returning OK anyways, since the certificate was imported */
-                        g_free(fileuri);
-                        g_main_loop_quit(mainloop);
-                        return OSSO_OK;
-                    }
-
-                    gconf_client_set_list(client,
-                                          GCONF_NEW_CERTS_KEY,
-                                          GCONF_VALUE_STRING,
-                                          new_certs,
-                                          NULL);
-                    gconf_client_suggest_sync(client, NULL);
-                    if (new_certs != NULL) g_slist_free(new_certs);
-                    g_object_unref(client);
-                }
-
-            }
             g_free(fileuri);
             g_main_loop_quit(mainloop);
             /*  gtk_main_quit(); */
@@ -337,7 +274,9 @@ osso_return_t osso_rpc_cb(const gchar *interface,
             retval->type = DBUS_TYPE_BOOLEAN;
             retval->value.b = TRUE;
             return OSSO_OK;
-        }
+        } else {
+			MAEMOSEC_ERROR("%s: invalid message", __func__);
+		}
     }
     return OSSO_ERROR;
 }
@@ -350,12 +289,11 @@ gboolean osso_init(osso_context_t **osso)
     osso_return_t ret;
 
     /* Init osso */
-    osso_log(LOG_INFO, "Initializing osso");
-    *osso = osso_initialize("certman",
-                            "1.0.29", TRUE, NULL);
+    MAEMOSEC_DEBUG(1, "Enter %s", __func__);
+    *osso = osso_initialize("certman", "1.0.29", TRUE, NULL);
 
-    if (*osso==NULL) {
-        osso_log(LOG_ERR, "Osso initialization failed");
+    if (NULL == *osso) {
+        MAEMOSEC_ERROR("Osso initialization failed");
         return FALSE;
     }
     g_assert(*osso);
@@ -370,7 +308,7 @@ gboolean osso_init(osso_context_t **osso)
                             NULL);
 
     if (ret != OSSO_OK) {
-        osso_log(LOG_ERR, "Could not set callback for receiving messages");
+        MAEMOSEC_ERROR("Could not set callback for receiving messages");
     }
 
 
@@ -381,8 +319,11 @@ gboolean osso_init(osso_context_t **osso)
                                NULL);
 
     if (ret != OSSO_OK) {
-        osso_log(LOG_ERR, "Could not set callback for HW monitoring");
+        MAEMOSEC_ERROR("Could not set callback for HW monitoring");
     }
+
+	if (!gnome_vfs_init())
+        MAEMOSEC_ERROR("%s: gnome_vfs_init returned FALSE", __func__);
 
     return TRUE;
 }
@@ -393,6 +334,8 @@ gboolean osso_deinit(osso_context_t *osso)
 {
     /* Unset callbacks */
     g_assert(osso);
+
+	gnome_vfs_shutdown();
 
     osso_rpc_unset_cb_f(osso,
                         "com.nokia.certman",
@@ -408,13 +351,9 @@ gboolean osso_deinit(osso_context_t *osso)
     return TRUE;
 }
 
-gboolean _import_file_stub() {
-    MAEMOSEC_DEBUG(1, "Mime_open stub executed");
-    return TRUE;
-}
 
-
-int main(int argc, char **argv) {
+int main(int argc, char* argv[]) 
+{
 
     gint result=0;
     Atom atom_c;
@@ -424,6 +363,8 @@ int main(int argc, char **argv) {
     bindtextdomain(LANGDOMAIN, LOCALEDIR);
     bind_textdomain_codeset(LANGDOMAIN, "UTF-8");
     textdomain(LANGDOMAIN);
+
+	ERR_print_errors_cb(report_openssl_error, NULL);
 
 	result = maemosec_certman_open(&root_store);
 	MAEMOSEC_DEBUG(1, "%s: maemosec_certman_open returned %d", __func__, result);

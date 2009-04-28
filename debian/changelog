@@ -1,8 +1,17 @@
 maemo-security-certman-applet (0.0.6) unstable; urgency=low
 
-  * In development
+  * Fixed the UI to match version 2.2. of the specs.
+    - Show information banner after installation. Fixes: NB#111995
+    - Added the missing dependency to localization package. Fixes: NB#101517, NB#111615, NB#111712
+    - Removed some creash points (ui_init, ui_refresh). Fixes: NB#105971, NB#111916
+    - Added detail display in installation. Fixes: #111991
+    - Changed to use touch multiselect. Fixes: #111992
+    - Added confirmation and banner to deletion. Fixes: #111994
+    - Show titles only once in certificate list. Fixes: #111605
+    - Fixed texts in installation. Fixes: #112087
+    - Used GnomeVFS to resolve incoming file URIs. Fixes: #112884
 
- -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 17 Apr 2009 16:40:00 +0200
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 28 Apr 2009 19:28:00 +0200
 
 maemo-security-certman-applet (0.0.5) unstable; urgency=low
 

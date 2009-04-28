@@ -4,22 +4,28 @@
 
 #define _BSD_SOURCE
 #define _XOPEN_SOURCE
+#define _USE_POSIX
 
 #include <libosso.h>
-#include <osso-log.h>
+// #include <osso-log.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 
+// #include <gtk/gtkenums.h>
+// #include <hildon/hildon-gtk.h>
+// #include <hildon/hildon-touch-selector.h>
+
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
+#include <openssl/err.h>
 #include <maemosec_common.h>
 #include <maemosec_certman.h>
 
@@ -27,6 +33,16 @@
 #include "osso-applet-certman.h"
 #include "cm_envelopes.h"
 
+/* Certificate list colums */
+enum {
+    MAIN_NAME_COL = 0,
+    MAIN_PURPOSE_COL,
+    MAIN_ID_COL,
+    MAIN_DOMAIN_COL,
+    MAIN_DOM_TYPE_COL,
+    MAIN_CONTENT_COL,
+    MAIN_NUM_COLUMNS
+};
 
 /* Local interface */
 
@@ -34,10 +50,17 @@ static void
 _create_certificate_list(GtkWidget** scroller,
 						 GtkWidget** list,
 						 GtkListStore** list_store);
+
+struct populate_context {
+	int domain_flags;
+	gchar *title;
+	GtkListStore *store;
+};
+
 static int 
 _populate_certificates(int pos,
 					   void* from_name,
-					   void* store);
+					   void* ctx);
 
 static void
 _add_row_header(GtkListStore *list_store,
@@ -107,21 +130,16 @@ typedef struct {
 
 
 /* Implementation */
-
-GtkWidget* dialog = NULL;
-
-GtkWidget* cert_list = NULL;
-GtkListStore* cert_list_store = NULL;
-GtkWidget* cert_scroller = NULL;
-
 /*
  * TODO: Get rid of global variables
  */
 
+GtkWidget* cert_list = NULL;
+GtkListStore* cert_list_store = NULL;
+GtkWidget* cert_scroller = NULL;
 osso_context_t *osso_global;
 GtkWindow* g_window = NULL;
-static int domain_flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
-
+static int flip_flop = 0;
 
 /** Parameter for row_activated callback */
 typedef struct {
@@ -154,38 +172,40 @@ GdkGeometry hints;
 RowParameter row_params[2];
 ButtonParameter button_param;
 
+/*
+ * There are eight predefined certificate stores that
+ * can be manipulated by this applet, two for each use.
+ * the <use>-user store contains user certificates and
+ * <use>-ca store the signing certificates.
+ */
 struct pkcs12_target {
 	gchar* symbolic_name;
-	gchar* user_domain;
-	gchar* ca_domain;
+	gchar* domain_name;
 };
+
+#define USER_DOMAIN_FMT "%s-user"
+#define CA_DOMAIN_FMT   "%s-ca"
 
 const struct pkcs12_target pkcs12_targets [] = {
 	{
-		.symbolic_name = "cert_nc_purpose_wlan_eap", 
-		.user_domain = "wifi-user", 
-		.ca_domain = "wifi-ca"
+		.symbolic_name = "cert_nc_purpose_ssl_tls", 
+		.domain_name = "ssl"
 	},
 	{
-		.symbolic_name = "cert_nc_purpose_ssl_tls", 
-		.user_domain = "ssl-user", 
-		.ca_domain = "ssl-ca"
+		.symbolic_name = "cert_nc_purpose_wlan_eap", 
+		.domain_name = "wifi"
 	},
 	{
 		.symbolic_name = "cert_nc_purpose_email_smime", 
-		.user_domain = "smime-user", 
-		.ca_domain = "smime-ca"
+		.domain_name = "smime" 
 	},
 	{
 		.symbolic_name = "cert_nc_purpose_software_signing", 
-		.user_domain = "ssign-user", 
-		.ca_domain = "ssign-ca"
+		.domain_name = "ssign"
 	},
-	// End mark
 	{
 		.symbolic_name = NULL,
-		.user_domain = NULL,
-		.ca_domain = NULL
+		.domain_name = NULL
 	}
 };
 
@@ -200,21 +220,6 @@ create_password_dialog(gpointer window,
 					   GtkWidget** passwd_entry,
 					   gboolean install_timeout,
 					   guint min_chars);
-
-static gchar* 
-get_purpose_name(const char* for_domain_name)
-{
-	int i;
-
-	for (i = 0; NULL != pkcs12_targets[i].symbolic_name; i++) {
-		if (0 == strcmp(pkcs12_targets[i].user_domain, for_domain_name)
-			|| 0 == strcmp(pkcs12_targets[i].ca_domain, for_domain_name))
-	    {
-			return(_(pkcs12_targets[i].symbolic_name));
-		}
-	}
-	return("");
-}
 
 gboolean 
 certmanui_init(osso_context_t *osso_ext) 
@@ -237,29 +242,34 @@ certmanui_deinit(void)
 GtkWidget* 
 ui_create_main_dialog(gpointer window) 
 {
+	GtkWidget* main_dialog = NULL;
+	const struct pkcs12_target *tgt;
+	char domain_name[256];
+	struct populate_context pc;
 	int rc;
+
+	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 
     if (window == NULL)
     {
+		MAEMOSEC_DEBUG(1, "%s: NULL window, exit", __func__);
         return NULL;
     }
 	g_window = window;
 
-	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
-
     /* Create dialog and set its attributes */
-    dialog = gtk_dialog_new_with_buttons(_("cema_ap_application_title"),
+    main_dialog = gtk_dialog_new_with_buttons(_("cema_ap_application_title"),
                                          GTK_WINDOW(window),
                                          GTK_DIALOG_MODAL
                                          | GTK_DIALOG_DESTROY_WITH_PARENT
                                          | GTK_DIALOG_NO_SEPARATOR,
                                          NULL);
-
-    if (NULL == dialog)
+    if (NULL == main_dialog)
     {
-        ULOG_ERR("Unable to create applet dialog.");
+        MAEMOSEC_ERROR("Unable to create applet dialog.");
         return NULL;
     }
+	MAEMOSEC_DEBUG(1, "Created main dialog");
 
     /* Put width and height */
     hints.min_width  = MIN_WIDTH;
@@ -267,12 +277,14 @@ ui_create_main_dialog(gpointer window)
     hints.max_width  = MAX_WIDTH;
     hints.max_height = MAX_HEIGHT;
 
-    gtk_window_set_geometry_hints(GTK_WINDOW(dialog), dialog, &hints,
+    gtk_window_set_geometry_hints(GTK_WINDOW(main_dialog), main_dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
+	MAEMOSEC_DEBUG(1, "Set geometry hints");
 
     _create_certificate_list(&cert_scroller,
                              &cert_list,
                              &cert_list_store);
+	MAEMOSEC_DEBUG(1, "Created certificate lists");
 
 	GtkWidget *panarea = hildon_pannable_area_new();
 	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
@@ -283,25 +295,34 @@ ui_create_main_dialog(gpointer window)
                      cert_list_store);
 
 	MAEMOSEC_DEBUG(1, "Populate user certificates");
-	_add_row_header(cert_list_store, _("cert_ti_main_notebook_user"));
-	domain_flags = MAEMOSEC_CERTMAN_DOMAIN_PRIVATE;
-	rc = maemosec_certman_iterate_domains(MAEMOSEC_CERTMAN_DOMAIN_PRIVATE,
-										  _populate_certificates,
-										  cert_list_store);
+	pc.store = cert_list_store;
+	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_PRIVATE;
+	pc.title = "cert_ti_main_notebook_user";
+	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) {
+		snprintf(domain_name, sizeof(domain_name), USER_DOMAIN_FMT, tgt->domain_name);
+		_populate_certificates(0, domain_name, &pc);
+	}
 
+	MAEMOSEC_DEBUG(1, "Populate user modifiable CA certificates");
+	pc.title = "cert_ti_main_notebook_authorities";
+	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) {
+		snprintf(domain_name, sizeof(domain_name), CA_DOMAIN_FMT, tgt->domain_name);
+		_populate_certificates(0, domain_name, &pc);
+	}
 
-	MAEMOSEC_DEBUG(1, "Populate root certificates");
-	_add_row_header(cert_list_store, _("cert_ti_main_notebook_authorities"));
-	domain_flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
+	MAEMOSEC_DEBUG(1, "Populate root CA certificates");
+	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
 	rc = maemosec_certman_iterate_domains(MAEMOSEC_CERTMAN_DOMAIN_SHARED,
 										  _populate_certificates,
-										  cert_list_store);
+										  &pc);
 
-    gtk_container_add(GTK_CONTAINER(GTK_DIALOG(dialog)->vbox), panarea);
+	MAEMOSEC_DEBUG(1, "Add pan area");
+    gtk_container_add(GTK_CONTAINER(GTK_DIALOG(main_dialog)->vbox), panarea);
 
-	gtk_widget_show_all(dialog);
+	MAEMOSEC_DEBUG(1, "Show all");
+	gtk_widget_show_all(main_dialog);
 
-    return dialog;
+    return(main_dialog);
 }
 
 struct cert_info {
@@ -453,6 +474,23 @@ fill_cert_data(int pos, X509* cert, void* info)
 	return(0);
 }
 
+static gchar* 
+get_purpose_name(const char* for_domain_name)
+{
+	int i;
+
+	for (i = 0; NULL != pkcs12_targets[i].symbolic_name; i++) {
+		if (strlen(for_domain_name) >= strlen(pkcs12_targets[i].domain_name)
+			&& 0 == memcmp(pkcs12_targets[i].domain_name, 
+						   for_domain_name,
+						   strlen(pkcs12_targets[i].domain_name)))
+	    {
+			return(_(pkcs12_targets[i].symbolic_name));
+		}
+	}
+	return("");
+}
+
 
 static void
 _copy_search_tree(struct cert_info *node, struct cert_display_info* to_this)
@@ -486,17 +524,18 @@ _release_search_tree(struct cert_info *node)
 
 
 static int 
-_populate_certificates(int pos, void* domain_name, void* store)
+_populate_certificates(int pos, void* domain_name, void* ctx)
 {
     GtkTreeIter iter;
     int rc;
 	domain_handle my_domain;
+	struct populate_context *pc = (struct populate_context*)ctx;
 	struct cert_display_info cd_info;
 
 	MAEMOSEC_DEBUG(1, "Enter, open domain '%s'", (char*)domain_name);
 
 	rc = maemosec_certman_open_domain((char*)domain_name, 
-									  domain_flags,
+									  pc->domain_flags,
 									  &my_domain);
 
 	MAEMOSEC_DEBUG(1, "%s(%s) ret %d", "maemosec_certman_open_domain",
@@ -508,8 +547,8 @@ _populate_certificates(int pos, void* domain_name, void* store)
 				   maemosec_certman_nbrof_certs(my_domain));
 
 	cd_info.domain_name = (char*)domain_name;
-	cd_info.domain_type = domain_flags;
-	cd_info.store = (GtkListStore*)store;
+	cd_info.domain_type = pc->domain_flags;
+	cd_info.store = pc->store;
 	cd_info.iter = &iter;
 	cd_info.search_tree = NULL;
 
@@ -520,6 +559,14 @@ _populate_certificates(int pos, void* domain_name, void* store)
 	 * TODO: order newly appended certificate records
 	 */
 	if (cd_info.search_tree) {
+		/*
+		 * Add header only if there are certificates and only once
+		 */
+		if (NULL != pc->title) {
+			_add_row_header(pc->store, _(pc->title));
+			pc->title = NULL;
+		}
+
 		_copy_search_tree(cd_info.search_tree, &cd_info);
 		_release_search_tree(cd_info.search_tree);
 	}
@@ -539,17 +586,25 @@ _is_row_header(GtkTreeModel *model,
 	gchar* title = NULL;
 	gchar* key_str = NULL;
 	gboolean result = FALSE;
+	int* flip_flop = (int*)data;
 
-	MAEMOSEC_DEBUG(4, "%s: Enter '%s' %p", __func__,
-				   title = gtk_tree_path_to_string(gtk_tree_model_get_path(model,iter)),
-				   data);
-	g_free(title);
-	gtk_tree_model_get(model, iter, MAIN_NAME_COL, &title, MAIN_ID_COL, &key_str, -1);
+	gtk_tree_model_get(model, iter, 
+					   MAIN_NAME_COL, &title, 
+					   MAIN_ID_COL, &key_str, -1);
+
 	if (NULL == key_str) {
 		if (NULL != title) {
-			MAEMOSEC_DEBUG(4, "%s: '%s' is row header", __func__, title);
-			if (header_text)
-				*header_text = g_strdup(title);
+			MAEMOSEC_DEBUG(4, "%s: '%s' is row header, already set=%d", 
+						   __func__, title, *flip_flop);
+			if (header_text) {
+				if (0 == *flip_flop) {
+					*header_text = g_strdup(title);
+					*flip_flop = 1;
+				} else
+					*header_text = g_strdup("");
+			} else {
+				*flip_flop = 0;
+			}
 			result = TRUE;
 		} else {
 			MAEMOSEC_DEBUG(4, "%s: Title not set?", __func__);
@@ -572,12 +627,7 @@ _add_row_header(GtkListStore *list_store,
     GtkTreeIter iter;
 	gtk_list_store_append(list_store, &iter);
 	gtk_list_store_set(list_store, &iter, 
-					   MAIN_NAME_COL,    header_text, 
-#if 0
-					   MAIN_PURPOSE_COL, " ",
-					   MAIN_ID_COL,      NULL,
-					   MAIN_DOMAIN_COL,  NULL,
-#endif
+					   MAIN_NAME_COL, header_text, 
 					   -1);
 }
 
@@ -596,7 +646,8 @@ _create_certificate_list(GtkWidget** scroller,
                                      G_TYPE_STRING,      /* MAIN_PURPOSE_COL */ 
 									 G_TYPE_STRING,      /* MAIN_ID_COL (hidden) */
 									 G_TYPE_STRING,      /* MAIN_DOMAIN_COL (hidden) */
-									 G_TYPE_INT);        /* MAIN_DOM_TYPE_COL (hidden) */
+									 G_TYPE_INT,         /* MAIN_DOM_TYPE_COL (hidden) */
+									 G_TYPE_STRING);     /* MAIN_CONTENT_COL (hidden) */
 
     /* Create list */
     *list = gtk_tree_view_new_with_model(GTK_TREE_MODEL(*list_store));
@@ -616,7 +667,8 @@ _create_certificate_list(GtkWidget** scroller,
 
     gtk_tree_view_column_set_widget(column, NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW(*list), column);
-	hildon_tree_view_set_row_header_func(GTK_TREE_VIEW(*list), _is_row_header, NULL, NULL);
+	hildon_tree_view_set_row_header_func(GTK_TREE_VIEW(*list), 
+										 _is_row_header, &flip_flop, NULL);
 
 #if 0
     g_object_set(G_OBJECT(column), "fixed-width", NAME_COL_WIDTH,
@@ -655,11 +707,6 @@ _create_certificate_list(GtkWidget** scroller,
 				 "wrap-mode", PANGO_WRAP_WORD_CHAR, 
 				 "wrap-width", wrap_width,
 				 NULL);
-
-#if 0	
-	/* Order the list initially according to the last column */
-	gtk_tree_view_column_clicked (column);
-#endif
 
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(*list), FALSE);
 
@@ -762,8 +809,9 @@ certmanui_certificate_details_dialog(gpointer window,
 								certificate));
 }
 
+#define INSTALL_CERT 0x08000000
 
-static gboolean 
+static gboolean
 _certificate_details(gpointer window,
 					 int domain_flags,
 					 X509* cert)
@@ -771,14 +819,15 @@ _certificate_details(gpointer window,
     GtkWidget* cert_dialog = NULL;
     GtkWidget* cert_notebook = NULL;
     GtkWidget* cert_main_page = NULL;
-	GtkWidget *bn_delete = NULL;
+	GtkWidget *bn_button = NULL;
 
     GdkGeometry hints;
     GtkWidget* infobox = NULL;
     GtkWidget* scroller = NULL;
     GtkRequisition requisition;
-    gboolean certificate_deleted = FALSE;
+	gchar *dlg_title, *btn_label;
     gint ret = 0;
+	gboolean result = FALSE;
 
     if (osso_global == NULL)
     {
@@ -789,18 +838,37 @@ _certificate_details(gpointer window,
     /* Check if cert_dialog != NULL */
 	MAEMOSEC_DEBUG(1, "%s: show simple dialog", __func__);
 
+	if (MAEMOSEC_CERTMAN_DOMAIN_PRIVATE == domain_flags) {
+		dlg_title = _("cert_ti_viewing_dialog");
+		btn_label = _("cert_bd_c_delete");
+
+	} else if (MAEMOSEC_CERTMAN_DOMAIN_SHARED == domain_flags) {
+		dlg_title = _("cert_ti_viewing_dialog");
+		btn_label = NULL;
+
+	} else if (INSTALL_CERT == domain_flags) {
+		dlg_title = _("cert_ti_install_certificate");
+		btn_label = _("cert_bd_cd_install");
+
+	} else {
+		dlg_title = _("cert_ti_install_certificate");
+		btn_label = NULL;
+	}
+
 	if (cert_dialog == NULL) {
 		cert_dialog = gtk_dialog_new_with_buttons
-			(_("cert_ti_viewing_dialog"),
+			(
+			 dlg_title,
 			 GTK_WINDOW(window),
 			 GTK_DIALOG_MODAL
 			 | GTK_DIALOG_DESTROY_WITH_PARENT
 			 | GTK_DIALOG_NO_SEPARATOR,
-			 NULL);
+			 NULL
+			 );
 
 		if (cert_dialog == NULL) {
 			MAEMOSEC_ERROR("Failed to create dialog");
-			return FALSE;
+			return(FALSE);
 		}
 
 	}
@@ -852,11 +920,11 @@ _certificate_details(gpointer window,
                                   cert_dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
-	if (MAEMOSEC_CERTMAN_DOMAIN_PRIVATE == domain_flags)
-		bn_delete = gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
-										  _("cert_bd_c_delete"), 
+	if (NULL != btn_label)
+		bn_button = gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
+										  btn_label,
 										  GTK_RESPONSE_APPLY);
-
+		
     /* Show and run the dialog */
 	MAEMOSEC_DEBUG(1, "Showing details");
     gtk_widget_show_all(cert_dialog);
@@ -866,21 +934,16 @@ _certificate_details(gpointer window,
         gtk_widget_grab_focus(cert_notebook);
     }
 
-    while (ret != GTK_RESPONSE_DELETE_EVENT)
-    {
-        ULOG_DEBUG("Before gtk_dialog_run\n");
+    do {
+        MAEMOSEC_DEBUG(1, "Before gtk_dialog_run");
         ret = gtk_dialog_run(GTK_DIALOG(cert_dialog));
-        ULOG_DEBUG("After gtk_dialog_run\n");
+        MAEMOSEC_DEBUG(1, "After gtk_dialog_run=%d", ret);
 
         if (GTK_RESPONSE_APPLY == ret) {
-			/*
-			 * Delete certificate
-			 */
-			MAEMOSEC_DEBUG(1, "%s: Delete!", __func__);
-			certificate_deleted = TRUE;
-			ret = GTK_RESPONSE_DELETE_EVENT;
+			result = TRUE;
+			break;
         }
-    }
+    } while (GTK_RESPONSE_DELETE_EVENT != ret);
 
     gtk_widget_hide_all(cert_dialog);
 
@@ -893,9 +956,9 @@ _certificate_details(gpointer window,
     /* Save store and delete dialog, if they weren't initialized */
 
 	gtk_widget_destroy(cert_dialog);
-	if (bn_delete)
-		gtk_widget_destroy(bn_delete);
-    return(certificate_deleted);
+	if (bn_button)
+		gtk_widget_destroy(bn_button);
+    return(result);
 }
 
 gboolean 
@@ -903,10 +966,7 @@ certmanui_install_certificate_details_dialog(gpointer window,
 											 X509* cert)
 {
 	MAEMOSEC_DEBUG(1, "Called certmanui_install_certificate_details_dialog");
-	_certificate_details(window, 
-						 MAEMOSEC_CERTMAN_DOMAIN_SHARED,
-						 cert);
-	return(FALSE);
+	return(_certificate_details(window, INSTALL_CERT, cert));
 }
 
 
@@ -918,10 +978,10 @@ get_fingerprint(X509 *of_cert,
 				char* value,
 				size_t value_size)
 {
-	EVP_MD* of_type;
+	const EVP_MD* of_type;
 	unsigned char digest_bin[64];
 	size_t digest_len, i;
-	char* digest_name, *hto;
+	char *digest_name, *hto;
 
 	/*
 	 * DEBUG: Warn about MD5-based signatures
@@ -932,7 +992,7 @@ get_fingerprint(X509 *of_cert,
 						of_cert->sig_alg->algorithm);
 		digest_bin[sizeof(digest_bin)-1] = '\0';
 		MAEMOSEC_DEBUG(1, "signed by %s", digest_bin);
-		for (hto = digest_bin; *hto; hto++)
+		for (hto = (char*)digest_bin; *hto; hto++)
 			*hto = toupper(*hto);
 	} else {
 		MAEMOSEC_ERROR("Unknown signature algorithm");
@@ -954,7 +1014,7 @@ get_fingerprint(X509 *of_cert,
 		digest_name = "SHA1";
 	}
 	MAEMOSEC_DEBUG(1, "Compute %s fingerprint", digest_name);
-	*use_type = of_type;
+	*use_type = (EVP_MD*)of_type;
 
 	if (X509_digest(of_cert, of_type, digest_bin, &digest_len)) {
 		snprintf(label, 
@@ -1352,7 +1412,7 @@ certmanui_get_privatekey(gpointer window,
                                                  _("cert_ti_enter_password"),
 												 "",
                                                  _("cert_ia_password"),
-                                                 "OK", // [wdgt_bd_done]
+                                                 dgettext("hildon-libs", "wdgt_bd_done"),
                                                  "",
                                                  &params.passwd_entry,
                                                  FALSE, 1);
@@ -1412,7 +1472,7 @@ _password_dialog_response(GtkDialog* dialog,
 
     if (params == NULL)
     {
-        ULOG_ERR("No params for _password_dialog_response!");
+        MAEMOSEC_ERROR("No params for _password_dialog_response!");
         return;
     }
 
@@ -1437,7 +1497,6 @@ _password_dialog_response(GtkDialog* dialog,
 
             /* Clear entry and show infonote */
             gtk_entry_set_text(GTK_ENTRY(params->passwd_entry), "");
-
             hildon_banner_show_information (GTK_WIDGET (dialog), 
 											NULL, _("cer_ib_incorrect"));
             gtk_widget_grab_focus(params->passwd_entry);
@@ -1601,6 +1660,56 @@ static void _passwd_text_changed(GtkEditable *editable,
 }
 
 
+static gboolean
+certmanui_confirm(gpointer window, X509* cert, const char* title)
+{
+	GtkWidget* dialog = NULL;
+	gchar* banner = NULL;
+	char cert_name[256];
+	gint i;
+
+	if (cert && 0 == maemosec_certman_get_nickname(cert, cert_name, sizeof(cert_name))) {
+		banner = g_strdup_printf(_(title), cert_name);
+	}
+
+	if (banner) {
+		dialog = hildon_note_new_confirmation(window, banner);
+		g_free(banner);
+	} else
+		dialog = hildon_note_new_confirmation(window, _(title));
+
+	i = gtk_dialog_run(GTK_DIALOG(dialog));
+	gtk_widget_destroy(GTK_WIDGET(dialog));
+	if (GTK_RESPONSE_OK == i)
+		return(TRUE);
+	else
+		return(FALSE);
+}
+
+static gboolean
+timeout_close_dialog(gpointer* the_dialog)
+{
+	MAEMOSEC_DEBUG(1, "Entered %s", __func__);
+	gtk_widget_hide_all((GtkWidget*)the_dialog);
+	gtk_widget_destroy(GTK_WIDGET(the_dialog));
+	return(FALSE);
+}
+
+
+static void
+certmanui_info(gpointer window, GtkWidget* dialog, const char* text)
+{
+	guint rc;
+	if (window)
+		hildon_banner_show_information(window, NULL, _(text));
+	else {
+		hildon_banner_show_information((gpointer)dialog, NULL, _(text));
+		rc = gtk_timeout_add(2000, (GtkFunction)timeout_close_dialog, dialog);
+		gtk_dialog_run(GTK_DIALOG(dialog));
+	}
+}
+
+
 static gboolean 
 _timeout_handler(gpointer user_data)
 {
@@ -1660,7 +1769,6 @@ certmanui_certificate_expired_with_name
     gint response_id = 0;
     GtkWidget* expired_dialog = NULL;
     GtkWidget* expired_label = NULL;
-    gchar* buf = NULL;
 
     static CallbackParameter params;
 
@@ -1759,14 +1867,13 @@ certmanui_show_error_with_name_and_serial
  CertificateExpiredResponseFunc callback,
  gpointer user_data
 ) {
-    gchar* use = NULL;
     GtkWidget* note = NULL;
     static CallbackParameter params;
     gchar* buf = NULL;
 
     if (cert_name == NULL && cert_serial == NULL)
     {
-        ULOG_ERR("No certificate name or serial supplied");
+        MAEMOSEC_ERROR("No certificate name or serial supplied");
         if (callback != NULL) 
 			callback(TRUE, user_data);
 		MAEMOSEC_DEBUG(1, "%s: <null>", __func__);
@@ -1821,15 +1928,16 @@ certmanui_show_error_with_name_and_serial
 }
 
 
-static void _expired_dialog_response(GtkDialog* dialog,
-                                     gint response_id,
-                                     gpointer data)
+static void 
+_expired_dialog_response(GtkDialog* dialog,
+						 gint response_id,
+						 gpointer data)
 {
     CallbackParameter* params = (CallbackParameter*)data;
 
     if (params == NULL)
     {
-        ULOG_ERR("No params for _expired_dialog_response!");
+        MAEMOSEC_ERROR("No params for _expired_dialog_response!");
         return;
     }
 
@@ -1843,15 +1951,16 @@ static void _expired_dialog_response(GtkDialog* dialog,
 }
 
 
-static void _infonote_dialog_response(GtkDialog* dialog,
-                                      gint response_id,
-                                      gpointer data)
+static void 
+_infonote_dialog_response(GtkDialog* dialog,
+						  gint response_id,
+						  gpointer data)
 {
     CallbackParameter* params = (CallbackParameter*)data;
 
     if (params == NULL)
     {
-        ULOG_ERR("_infonote_dialog_response: wrong parameters");
+        MAEMOSEC_ERROR("_infonote_dialog_response: wrong parameters");
     }
 
     params->callback(TRUE, params->user_data);
@@ -1879,9 +1988,12 @@ cert_list_row_activated(GtkTreeView* tree,
 	gboolean do_delete = FALSE;
 	char* b64_cert = NULL;
 
+	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
+
     /* Set iterator to point to right node */
     if (!gtk_tree_model_get_iter(model, &iter, path))
     {
+		MAEMOSEC_ERROR("%s: cannot get iterator", __func__);
         return;
     }
 
@@ -1896,7 +2008,7 @@ cert_list_row_activated(GtkTreeView* tree,
 
 	if (NULL == b64_cert) {
 
-		MAEMOSEC_DEBUG(1, "%s:%s:%s:%s:%s", __func__, 
+		MAEMOSEC_DEBUG(1, "%s: fetch %s:%s:%s:%s", __func__, 
 					   MAEMOSEC_CERTMAN_DOMAIN_SHARED==domain_flags?"shared":"private",
 					   domain, cert_id, name_str);
 
@@ -1920,6 +2032,21 @@ cert_list_row_activated(GtkTreeView* tree,
 
 		maemosec_certman_close_domain(dh);
 		dh = 0;
+
+	} else {
+		unsigned len;
+		unsigned char *cert_der = NULL;
+
+		len = base64_decode(b64_cert, &cert_der);
+		if (0 < len && NULL != cert_der) {
+			const unsigned char* tmp = cert_der;
+			MAEMOSEC_DEBUG(1, "%s: decoded %d bytes", __func__, len);
+			cert = d2i_X509(NULL, &tmp, len);
+		} else {
+			MAEMOSEC_ERROR("%s: decoding failed", __func__);
+		}
+		if (cert_der)
+			free(cert_der);
 	}
 
 	window = gtk_widget_get_ancestor(GTK_WIDGET(tree),
@@ -1927,11 +2054,17 @@ cert_list_row_activated(GtkTreeView* tree,
 
 	do_delete = certmanui_certificate_details_dialog(window, domain_flags, cert);
 
+	if (do_delete && NULL == b64_cert) {
+		do_delete = certmanui_confirm(window, cert, "cert_nc_confirm_dialog");
+	} else
+		do_delete = FALSE;
+
 	if (do_delete) {
 		rc = maemosec_certman_open_domain(domain, domain_flags, &dh);
 		if (0 == rc) {
 			rc = maemosec_certman_rm_cert(dh, cert_key);
 			if (0 == rc) {
+				certmanui_info(window, NULL, "cert_ib_uninstalled");
 				MAEMOSEC_DEBUG(1, "Certificate %s deleted", cert_id);
 				if (gtk_list_store_remove(list_store, &iter)) {
 					MAEMOSEC_DEBUG(1, "gtk_list_store_remove returned TRUE");
@@ -1949,6 +2082,8 @@ cert_list_row_activated(GtkTreeView* tree,
 		maemosec_certman_close_domain(dh);
 	if (cert)
 		X509_free(cert);
+	if (b64_cert)
+		g_free(b64_cert);
 	if (name_str)
 		g_free(name_str);
 	if (domain)
@@ -1958,75 +2093,8 @@ cert_list_row_activated(GtkTreeView* tree,
 	return;
 }
 
-gint cc_counter;
 
-/* Import dialog */
-GtkWidget* import_dialog = NULL;
-
-#define CST_DISABLE 
-
-gboolean 
-certmanui_delete_certificate(gpointer window, maemosec_key_id cert_id)
-{
-    GtkWidget* cn = NULL;
-    X509* certificate = NULL;
-    gchar* buf = NULL;
-    gchar* name_str = NULL;
-    gboolean ret = FALSE;
-    gint response;
-
-    MAEMOSEC_DEBUG(1, "Enter %s", __func__);
-    /* Get certificate and it's name */
-    if (certificate == NULL)
-    {
-#ifndef CST_DISABLE
-        _show_cst_importexport_error(window, CST_ERROR_CERT_NOTFOUND);
-#endif
-        return FALSE;
-    }
-#ifndef CST_DISABLE
-    name_str = get_certificate_name(certificate);
-#endif
-    X509_free(certificate);
-    certificate = NULL;
-
-    /* Create confirmation note */
-    buf = g_strdup_printf(_("cert_nc_confirm_dialog"), name_str);
-    g_free(name_str);
-    name_str = NULL;
-
-    cn = hildon_note_new_confirmation(GTK_WINDOW(window), buf);
-    g_free(buf);
-    buf = NULL;
-    gtk_widget_show_all(cn);
-
-    /* Run dialog and delete it after running */
-    response = gtk_dialog_run(GTK_DIALOG(cn));
-    gtk_widget_hide_all(cn);
-    gtk_widget_destroy(cn); cn = NULL;
-
-    /* If response was OK, delete certificate */
-    if (response == GTK_RESPONSE_OK)
-    {
-#ifndef CST_DISABLE
-        response = CST_delete_cert(get_cst(), cert_id);
-#endif
-        if (0 != response)
-        {
-#ifndef CST_DISABLE
-            _show_cst_importexport_error(window, response);
-#endif
-        } else {
-            ret = TRUE;
-        }
-    }
-
-    /* Close store if necessary */
-    return ret;
-}
-
-
-static int
+int
 report_openssl_error(const char* str, size_t len, void* u)
 {
 	char* tmp = strrchr(str, '\n');
@@ -2044,7 +2112,7 @@ gchar*
 ask_password(gpointer window, 
 			 int test_password(void* data, gchar* pwd), 
 			 void* data, 
-			 gchar* info)
+			 const char* info)
 {
 	gint response = 0;
 	GtkWidget* passwd_dialog = NULL;
@@ -2100,73 +2168,12 @@ ask_password(gpointer window,
 }
 
 
-static void 
-_create_contents_list(GtkWidget** scroller,
-					  GtkWidget** list,
-					  GtkListStore** list_store)
-{
-    GtkCellRenderer* renderer = NULL;
-    GtkTreeViewColumn* column = NULL;
-
-    *list_store = gtk_list_store_new(MAIN_NUM_COLUMNS,
-                                     G_TYPE_STRING,      /* MAIN_NAME_COL */
-                                     G_TYPE_STRING,      /* MAIN_PURPOSE_COL */ 
-									 G_TYPE_STRING,      /* MAIN_ID_COL (hidden) */
-									 G_TYPE_STRING,      /* MAIN_DOMAIN_COL (hidden) */
-									 G_TYPE_INT,         /* MAIN_DOM_TYPE_COL (hidden) */
-									 G_TYPE_STRING);     /* MAIN_CONTENT_COL (hidden) */
-
-    /* Create list */
-    *list = gtk_tree_view_new_with_model(GTK_TREE_MODEL(*list_store));
-    g_object_unref(*list_store);
-
-    /* Create columns to the list */
-
-    /* Certificate name column */
-    renderer = gtk_cell_renderer_text_new();
-
-    column = gtk_tree_view_column_new_with_attributes 
-		(NULL,
-		 renderer,
-        "text", 
-		 MAIN_NAME_COL,
-		 NULL);
-
-    gtk_tree_view_column_set_widget(column, NULL);
-    gtk_tree_view_append_column (GTK_TREE_VIEW(*list), column);
-
-    /* Certificate purpose column */
-	column = gtk_tree_view_column_new_with_attributes 
-		(NULL,
-		 renderer,
-		 "text", 
-		 MAIN_PURPOSE_COL,
-		 NULL);
-	gtk_tree_view_column_set_widget(column, NULL);
-	gtk_tree_view_append_column (GTK_TREE_VIEW(*list), column);
-    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(*list), FALSE);
-    return;
-}
-
-
 static gboolean
-close_import_dialog(gpointer* the_dialog)
+certmanui_install_certificates_dialog(gpointer window, 
+									  STACK_OF(X509) *certs,
+									  EVP_PKEY* pkey)
 {
-	MAEMOSEC_DEBUG(1, "Entered %s", __func__);
-	gtk_widget_hide_all((GtkWidget*)the_dialog);
-	gtk_widget_destroy(GTK_WIDGET(the_dialog));
-	return(FALSE);
-}
-
-
-#define maemosec_certman_is_ca(x) (TRUE)
-
-static int
-show_certificates(gpointer window, 
-				  STACK_OF(X509) *certs,
-				  EVP_PKEY* pkey)
-{
-	GtkWidget* dialog = NULL;
+	GtkWidget* install_dialog = NULL;
 	GtkListStore* contents_store = NULL;
 	GtkWidget* contents_list = NULL;
 	GtkWidget* scroller = NULL;
@@ -2175,29 +2182,36 @@ show_certificates(gpointer window,
     GtkTreeIter iter;
 	GdkGeometry hints;
 	char namebuf[255];
-	int i, rc, ret;
+	int i, rc;
+	gint ret;
+	gboolean result = FALSE;
+	const gchar *cert_type;
 
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 
-	dialog = gtk_dialog_new_with_buttons(_("cert_ti_install_certificates"),
-										 GTK_WINDOW(window),
-										 GTK_DIALOG_MODAL
-										 | GTK_DIALOG_DESTROY_WITH_PARENT
-										 | GTK_DIALOG_NO_SEPARATOR,
-										 NULL);
+	install_dialog = gtk_dialog_new_with_buttons
+		(_("cert_ti_install_certificates"),
+		 GTK_WINDOW(window),
+		 GTK_DIALOG_MODAL
+		 | GTK_DIALOG_DESTROY_WITH_PARENT
+		 | GTK_DIALOG_NO_SEPARATOR,
+		 NULL);
+
     hints.min_width  = MIN_WIDTH;
     hints.min_height = MIN_HEIGHT;
     hints.max_width  = MAX_WIDTH;
     hints.max_height = MAX_HEIGHT;
 
-	gtk_window_set_geometry_hints(GTK_WINDOW(dialog), dialog, &hints,
+	gtk_window_set_geometry_hints(GTK_WINDOW(install_dialog), 
+								  install_dialog, 
+								  &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
-	bn_install = gtk_dialog_add_button(GTK_DIALOG(dialog),
-									  _("cert_bd_c_install"), 
+	bn_install = gtk_dialog_add_button(GTK_DIALOG(install_dialog),
+									  _("cert_bd_cd_install"), 
 									  GTK_RESPONSE_APPLY);
 
-	_create_contents_list(&scroller, &contents_list, &contents_store);
+	_create_certificate_list(&scroller, &contents_list, &contents_store);
 
 	panarea = hildon_pannable_area_new();
 	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
@@ -2213,6 +2227,8 @@ show_certificates(gpointer window,
 		X509* cert = sk_X509_value(certs, i);
 		unsigned char* cder;
 		char* b64cert;
+		maemosec_key_id key_id;
+		char key_id_str [MAEMOSEC_KEY_ID_STR_LEN];
 		int len;
 
 		rc = maemosec_certman_get_nickname(cert, namebuf, sizeof(namebuf));
@@ -2231,58 +2247,85 @@ show_certificates(gpointer window,
 		}
 
 		b64cert = base64_encode(cder, len);
+		MAEMOSEC_ERROR("%s: encoded %d bytes", __func__, len);
 
 		gtk_list_store_append(contents_store, &iter);
-		gtk_list_store_set(contents_store, &iter, MAIN_CONTENT_COL, b64cert, -1);
+		gtk_list_store_set(contents_store, &iter, 
+						   MAIN_CONTENT_COL, b64cert, 
+						   MAIN_DOM_TYPE_COL, INSTALL_CERT + 1,
+						   -1);
 
-		if (maemosec_certman_is_ca(cert)) {
-			char *temp = g_strdup_printf(_("cert_li_certificate_signing"), namebuf);
-			gtk_list_store_set(contents_store, &iter, MAIN_NAME_COL, temp, -1);
-			g_free(temp);
+		if (   0 == maemosec_certman_get_key_id(cert, key_id)
+			&& 0 == maemosec_certman_key_id_to_str(key_id, key_id_str, sizeof(key_id_str)))
+				gtk_list_store_set(contents_store, &iter, MAIN_ID_COL, key_id_str, -1);
 
+		if (X509_check_ca(cert)) {
+			cert_type = "cert_li_certificate_signing";
 		} else if (NULL != pkey) {
-			gtk_list_store_set(contents_store, &iter, 
-							   MAIN_NAME_COL, _("cert_li_certificate_user_key"),
-							   -1);
+			cert_type = "cert_li_certificate_user_key";
 		} else {
-			gtk_list_store_set(contents_store, &iter, 
-							   MAIN_NAME_COL, _("cert_li_certificate_user"),
-							   -1);
+			cert_type = "cert_li_certificate_user";
 		}
-
+		gtk_list_store_set(contents_store, &iter, 
+						   MAIN_NAME_COL, _(cert_type),
+						   MAIN_PURPOSE_COL, namebuf,
+						   -1);
 		free(b64cert);
 		OPENSSL_free(cder);
 	}
 
-    gtk_widget_show_all(dialog);
+	MAEMOSEC_DEBUG(1, "Add pan area");
+    gtk_container_add(GTK_CONTAINER(GTK_DIALOG(install_dialog)->vbox), panarea);
 
-	ret = gtk_dialog_run(GTK_DIALOG(dialog));
+	MAEMOSEC_DEBUG(1, "Show all");
+    gtk_widget_show_all(install_dialog);
 
-	return(0);
+	do {
+        MAEMOSEC_DEBUG(1, "Before gtk_dialog_run");
+        ret = gtk_dialog_run(GTK_DIALOG(install_dialog));
+        MAEMOSEC_DEBUG(1, "After gtk_dialog_run ret=%d", ret);
+
+        if (GTK_RESPONSE_APPLY == ret) {
+			MAEMOSEC_DEBUG(1, "%s: Install!", __func__);
+			result = TRUE;
+			break;
+        }
+	} while (GTK_RESPONSE_DELETE_EVENT != ret);
+
+    gtk_widget_hide_all(install_dialog);
+
+    gtk_widget_destroy(scroller);
+    scroller = NULL; 
+
+	gtk_widget_destroy(install_dialog);
+	if (bn_install)
+		gtk_widget_destroy(bn_install);
+
+	return(result);
 }
 
 
-static gint
+static gboolean
 ask_domains(gpointer window, 
 			GtkWidget **dialog,
-			gchar **user_domain,
-			gchar **ca_domain)
+			GList** domains)
 {
 	gint response;
-	GtkListStore* contents_store = NULL;
-	GtkWidget* contents_list = NULL;
-	GtkWidget* scroller = NULL;
+	HildonTouchSelector *selector;
 	GdkGeometry hints;
+	GtkWidget* panarea;
+	GtkWidget* bn_button;
+	GList *selected;
+	const struct pkcs12_target *tgt;
 
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 	
-	*dialog = gtk_dialog_new_with_buttons(_("cert_ti_install_certificate"),
+	*dialog = gtk_dialog_new_with_buttons(_("cert_ti_application_trust"),
 										 GTK_WINDOW(window),
 										 GTK_DIALOG_MODAL
 										 | GTK_DIALOG_DESTROY_WITH_PARENT
 										 | GTK_DIALOG_NO_SEPARATOR,
 										 NULL);
-
     hints.min_width  = MIN_WIDTH;
     hints.min_height = MIN_HEIGHT;
     hints.max_width  = MAX_WIDTH;
@@ -2291,19 +2334,21 @@ ask_domains(gpointer window,
 	gtk_window_set_geometry_hints(GTK_WINDOW(*dialog), *dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
+	bn_button = gtk_dialog_add_button(GTK_DIALOG(*dialog),
+									  _("cert_bd_trust_settings_ok"),
+									  GTK_RESPONSE_APPLY);
 
-	_create_contents_list(&scroller, &contents_list, &contents_store);
+	selector = (HildonTouchSelector*)hildon_touch_selector_new_text();
+	hildon_touch_selector_set_column_selection_mode
+		(selector, HILDON_TOUCH_SELECTOR_SELECTION_MODE_MULTIPLE);
 
-	GtkWidget *panarea = hildon_pannable_area_new();
+	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) 
+		hildon_touch_selector_append_text(selector, _(tgt->symbolic_name));
+
+	panarea = hildon_pannable_area_new();
 	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
-										  GTK_WIDGET(contents_list));
+										   (GtkWidget*)selector);
 
-    g_signal_connect(G_OBJECT(contents_list), 
-					 "row-activated",
-                     G_CALLBACK(cert_list_row_activated),
-                     contents_store);
-
-	MAEMOSEC_DEBUG(1, "Contents ready");
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), panarea);
 
 	MAEMOSEC_DEBUG(1, "Show dialog");
@@ -2311,241 +2356,145 @@ ask_domains(gpointer window,
 
 	MAEMOSEC_DEBUG(1, "Run dialog");
     response = gtk_dialog_run(GTK_DIALOG(*dialog));
+	MAEMOSEC_DEBUG(1, "Response = %d", response);
+
+	*domains = NULL;
+	selected = hildon_touch_selector_get_selected_rows(selector, 0);
+	while (selected) {
+		GtkTreePath *sel = (GtkTreePath*)(selected->data);
+		gchar* domain_name = pkcs12_targets[*gtk_tree_path_get_indices(sel)].domain_name;
+		MAEMOSEC_DEBUG(1, "%s: selected '%s'", __func__, domain_name);
+		*domains = g_list_append(*domains, g_strdup(domain_name));
+		selected = selected->next;
+	}
+	g_list_free(selected);
 
 	MAEMOSEC_DEBUG(1, "Exit %s", __func__);
 
-	return(0);
+	return(GTK_RESPONSE_APPLY == response && 0 < g_list_length(*domains));
 }
 
 
 gboolean 
-certmanui_import_file(gpointer window, const gchar* fileuri,
-		      maemosec_key_id* cert_id, GSList **pk12_list)
+certmanui_import_file(gpointer window, 
+					  const gchar* fileuri,
+					  maemosec_key_id* cert_id, 
+					  GSList **pk12_list)
 {
-    cc_counter = 1;
-    ConfirmCallbackParameter param;
-    FILE *fp = NULL;
-	void* idata = NULL;
 	STACK_OF(X509) *certs = NULL;
 	EVP_PKEY *pkey = NULL;
-	const char* filetype;
-	gchar *user_domain = NULL, *ca_domain = NULL;
+	GtkWidget *dialog = NULL;
+	GList* domains = NULL;
+	const char *confirmation_text;
+	gchar* password = NULL;
+	bool do_install;
 
-	ERR_print_errors_cb(report_openssl_error, NULL);
-
-    memset(&param, 0, sizeof(param));
-
-    /* 
-	 * Transfer the certificate from URI to tmpfile
-	 * URI is of form "file://<absolute-path>" at least in requests
-	 * coming from the filemanager.
-	 * Gnome VFS was used to convert those, but this is a quick-and-dirty
-	 * hack to make the demo day without VFS.
-	 */
-
-#define FILEPREFIX "file://"	
-
-    if (strlen(fileuri) > strlen(FILEPREFIX) 
-		&& 0 == memcmp(fileuri, FILEPREFIX, strlen(FILEPREFIX)))
-    {
-		fp = fopen(fileuri + strlen(FILEPREFIX), "rb");
-		if (!fp) {
-			MAEMOSEC_ERROR("Cannot open '%s'", fileuri);
-			return(FALSE);
-		}
-    } else {
-		MAEMOSEC_ERROR("Unsupported protocol in '%s'", fileuri);
+	if (!extract_envelope(window, fileuri, &certs, &pkey, &password))
 		return(FALSE);
+
+	if (NULL == pkey && 1 == sk_X509_num(certs)) {
+		/*
+		 * Just a single certificate
+		 */
+		do_install = certmanui_install_certificate_details_dialog
+			(window, sk_X509_value(certs, 0));
+		MAEMOSEC_DEBUG(1, "certmanui_install_certificate_details_dialog=%d", 
+					   do_install);
+		confirmation_text = "cert_ib_installed_certificate";
+	} else {
+		/* 
+		 * A packet of many certificates
+		 */
+		do_install = certmanui_install_certificates_dialog
+			(window, certs, pkey);
+		MAEMOSEC_DEBUG(1, "certmanui_install_certificates_dialog=%d", 
+					   do_install);
+		confirmation_text = "cert_ib_installed_certificates";
 	}
 
-	filetype = determine_filetype(fp, &idata);
-	MAEMOSEC_DEBUG(1, "'%s' seems to be '%s'", fileuri, filetype);
+	if (!do_install)
+		goto cleanup;
 
-	/*
-	 * TODO: Are there envelopes that can contain more than
-	 * one private key? Is there a STACK_OF(EVP_PKEY)?
-	 */
-	if (extract_envelope(window, idata, filetype, &certs, &pkey)) {
-		int do_install;
-		if (NULL == pkey && 1 == sk_X509_num(certs)) {
-			/*
-			 * Just a single certificate
-			 */
-			do_install = certmanui_certificate_details_dialog
-				(window, MAEMOSEC_CERTMAN_DOMAIN_SHARED, sk_X509_value(certs, 0));
-		} else
-			do_install = show_certificates(window, certs, pkey);
+	MAEMOSEC_DEBUG(1, "Ask purpose");
 
-		if (do_install) {
-			// do_install = ask_domains();
-			if (do_install) {
-				/*
-				 * TODO: Go through the list of certificates
-				 * and install them to the appropriate domains.
-				 */
-				
-			}
-		}
-
-		if (pkey)
-			EVP_PKEY_free(pkey);
-		if (certs)
-			sk_X509_free(certs);
-	}
-
-#if 0
-		if (strcmp(filetype, "PKCS12") == 0) {
-			gchar* password;
-			int rc;
-			
-			MAEMOSEC_DEBUG(1, "try to parse PKCS12");
-			show_pkcs12_info((PKCS12*)idata);
-
-			if (test_pkcs12_password(idata, NULL))
-				password = NULL;
-			else if (test_pkcs12_password(idata, ""))
-				password = "";
-			else
-				password = ask_password(window, test_pkcs12_password, idata, 
-										bare_file_name(fileuri));
-
-			rc = PKCS12_parse((PKCS12*)idata, password, &pkey, &cert, &ca);
-			MAEMOSEC_DEBUG(1, "parse PKCS12 returned %d, key=%p, cert=%p, cas=%p", 
-						   rc, pkey, cert, ca);
-
-			if (rc) {
-				GtkWidget* dialog = NULL;
-				domain_handle cdom;
-				maemosec_key_id key_id;
-				int mrc;
-
-				rc = ask_domains(window, &dialog, cert, pkey, ca, &user_domain, &ca_domain);
-				if (NULL == dialog)
-					goto certmanui_import_file_cleanup;
-
-				if (GTK_RESPONSE_OK == rc) {
-
-					/*
-					 * TODO: Install to several domains
-					 */
-
-					if (cert) {
-						if (user_domain) {
-							mrc = maemosec_certman_open_domain
-								(user_domain,
-								 MAEMOSEC_CERTMAN_DOMAIN_PRIVATE,
-								 &cdom);
-							if (0 == mrc) {
-								maemosec_certman_add_cert(cdom, cert);
-								maemosec_certman_close_domain(cdom);
-							}
-						}
-						maemosec_certman_get_key_id(cert, key_id);
-						X509_free(cert);
-						cert = NULL;
-					}
-				
-					if (ca) {
-						if (ca_domain) {
-							mrc = maemosec_certman_open_domain
-								(
-								 ca_domain, 
-								 MAEMOSEC_CERTMAN_DOMAIN_PRIVATE,
-								 &cdom);
-							if (0 == mrc) {
-								int i;
-								for (i = 0; i < sk_X509_num(ca); i++) {
-									X509* cacert = sk_X509_value(ca, i);
-									maemosec_certman_add_cert(cdom, cacert);
-								}
-								maemosec_certman_close_domain(cdom);
-							}
-						}
-						sk_X509_free(ca);
-						ca = NULL;
-					}
-
-					if (pkey) {
-						maemosec_certman_store_key(key_id, pkey, password);
-						EVP_PKEY_free(pkey);
-					}
-
-					MAEMOSEC_DEBUG(1, "Certificates installed OK");
-					hildon_banner_show_information (dialog,
-													NULL, 
-													"Certificates installed");
-				} else {
-					hildon_banner_show_information (dialog,
-													NULL, 
-													"Installation cancelled");
-				}
-				/*
-				 * Close the dialog in two seconds
-				 */
-				{
-					guint rc = gtk_timeout_add(2000, close_import_dialog, dialog);
-					MAEMOSEC_DEBUG(1, "gtk_timeout_add ret %d", rc);
-				}
-				gtk_dialog_run(GTK_DIALOG(dialog));
-			}
-
-			// TODO: Error from invalid PKCS#12 file
-		} else if (   0 == strcmp(filetype, "X509-PEM")
-				   || 0 == strcmp(filetype, "X509-DER")) 
-		{
-
-			GtkWidget* dialog = NULL;
-			domain_handle cdom;
-			int rc;
-			X509 *cert = (X509*) idata;
-			STACK_OF(X509) *cas = NULL;
-
-			cas = sk_X509_new_null();
-			if (maemosec_certman_is_ca(cert)) {
-				MAEMOSEC_DEBUG(1, "%s: is ca", __func__);
-				sk_X509_push(cas, cert); 
-				cert = NULL;
-			}
-			rc = ask_domains(window, &dialog, cert, NULL, cas, &user_domain, &ca_domain);
-			if (NULL == dialog)
-				goto certmanui_import_file_cleanup;
-
-			if (GTK_RESPONSE_OK == rc) {
-				
-				rc = maemosec_certman_open_domain
-					(user_domain,
-					 MAEMOSEC_CERTMAN_DOMAIN_PRIVATE,
-					 &cdom);
-				if (0 == rc) {
-					maemosec_certman_add_cert(cdom, cert);
-					maemosec_certman_close_domain(cdom);
-					MAEMOSEC_DEBUG(1, "Certificates installed OK");
-					hildon_banner_show_information (dialog,
-													NULL, 
-													"Certificates installed");
-				} else {
-					hildon_banner_show_information (dialog,
-													NULL, 
-													"Installation cancelled");
-				}
-				/*
-				 * Close the dialog in two seconds
-				 */
-				rc = gtk_timeout_add(2000, close_import_dialog, dialog);
-				gtk_dialog_run(GTK_DIALOG(dialog));
-				X509_free(cert);
-				cert = NULL;
-			}
-		}
-	}
-#endif
-
- certmanui_import_file_cleanup:
-
-	if (user_domain)
-		g_free(user_domain);
-	if (ca_domain)
-		g_free(ca_domain);
+	do_install = ask_domains(window, &dialog, &domains);
 		
+	if (!do_install) 
+		goto cleanup;
+
+	MAEMOSEC_DEBUG(1, "About to install");
+	while (domains) {
+		char domain_name[256];
+		char cert_name[256];
+		domain_handle dh;
+		int i, rc;
+
+		for (i = 0; i < sk_X509_num(certs); i++) {
+			X509* cert = sk_X509_value(certs, i);
+			rc = maemosec_certman_get_nickname(cert, cert_name, sizeof(cert_name));
+			if (X509_check_ca(cert)) {
+				snprintf(domain_name, sizeof(domain_name),
+						 CA_DOMAIN_FMT, (char*)domains->data);
+			} else {
+				snprintf(domain_name, sizeof(domain_name),
+						 USER_DOMAIN_FMT, (char*)domains->data);
+				/*
+				 * TODO: Ask for a new password.
+				 */
+				if (pkey) {
+					maemosec_key_id key_id;
+					rc = maemosec_certman_get_key_id(cert, key_id);
+					if (0 == rc) {
+						rc = maemosec_certman_store_key(key_id, pkey, password?password:"");
+						if (0 == rc)
+							MAEMOSEC_DEBUG(1, "Stored private key");
+						else
+							MAEMOSEC_ERROR("Cannot store private key, rc = %d", rc);
+					} else
+						MAEMOSEC_ERROR("Cannot get key id, rc = %d", rc);
+				} else {
+					MAEMOSEC_DEBUG(1, "User cert '%s' without private key?",
+								   cert_name);
+				}
+			}
+			MAEMOSEC_DEBUG(1, "Installing '%s' to '%s'", cert_name, domain_name);
+
+			rc = maemosec_certman_open_domain
+				(domain_name, MAEMOSEC_CERTMAN_DOMAIN_PRIVATE, &dh);
+
+			if (0 == rc) {
+				rc = maemosec_certman_add_cert(dh, cert);
+				if (EEXIST == rc) {
+					/*
+					 * Certificate already exists in the domain
+					 */
+					MAEMOSEC_ERROR("'%s' already exists in domain '%s'",
+								   cert_name, domain_name);
+				} else if (0 != rc) {
+					/*
+					 * Some other error
+					 */
+					MAEMOSEC_ERROR("cannot add '%s' to domain '%s', rc = %d",
+								   cert_name, domain_name, rc);
+				}
+				maemosec_certman_close_domain(dh);
+			} else {
+				MAEMOSEC_ERROR("cannot open domain '%s', rc = %d",
+							   domain_name, rc);
+			}
+		}
+		domains = domains->next;
+	}
+	certmanui_info(NULL, dialog, confirmation_text);
+	gtk_widget_hide_all(dialog);
+	gtk_widget_destroy(dialog);
+
+ cleanup:
+	if (domains)
+		g_list_free(domains);
+	if (pkey)
+		EVP_PKEY_free(pkey);
+	if (certs)
+		sk_X509_free(certs);
 	return(TRUE);
 }
