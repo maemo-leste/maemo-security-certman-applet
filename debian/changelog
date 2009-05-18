@@ -1,7 +1,23 @@
+maemo-security-certman-applet (0.0.7) unstable; urgency=low
+  
+  * Do not allow installing a server certificate directly from the browser
+  * Use proper translation in certmanui_certificate_expired_with_name. 
+      Fixes: NB#106894
+  * Added error banner when trying to install invalid certificate. 
+      Fixes: NB#112712
+  * Couldn't reproduce the control panel crash any more.
+      Fixes: NB#110634
+  * Addressed the more severe Coverity findings. 
+      Fixes: NB#109670
+  * Added check for invalid dbus messages.
+      Fixes: NB#105971
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 18 May 2009 17:00:00 +0300
+
 maemo-security-certman-applet (0.0.6) unstable; urgency=low
 
   * Fixed the UI to match version 2.2. of the specs.
-    - Show information banner after installation. Fixes: NB#111995
+    - Show information banner after installation.
     - Added the missing dependency to localization package. Fixes: NB#101517, NB#111615, NB#111712
     - Removed some creash points (ui_init, ui_refresh). Fixes: NB#105971, NB#111916
     - Added detail display in installation. Fixes: #111991

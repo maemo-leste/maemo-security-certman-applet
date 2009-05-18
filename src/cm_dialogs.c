@@ -753,7 +753,7 @@ static gboolean _certificate_details(gpointer window,
    @param cert_id       ID for given certificate, or 0, if cert is provided
    @param cert          Certificate, if no cert_id is 0.
 */
-static GtkWidget* _create_infobox(X509* cert);
+static GtkWidget* _create_infobox(gpointer window, X509* cert);
 
 /**
    Adds labels to the given table.
@@ -873,7 +873,7 @@ _certificate_details(gpointer window,
 
 	}
 
-    infobox = _create_infobox(cert);
+    infobox = _create_infobox(window, cert);
 
     /* Unable to open certificate, give error and exit */
     if (infobox == NULL)
@@ -962,11 +962,17 @@ _certificate_details(gpointer window,
 }
 
 gboolean 
-certmanui_install_certificate_details_dialog(gpointer window,
-											 X509* cert)
+certmanui_install_certificate_details_dialog(gpointer window, X509* cert)
 {
+	int flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
+
 	MAEMOSEC_DEBUG(1, "Called certmanui_install_certificate_details_dialog");
-	return(_certificate_details(window, INSTALL_CERT, cert));
+	/*
+	 * TODO: validity checks
+	 */
+	if (X509_check_ca(cert)) 
+		flags = INSTALL_CERT;
+	return(_certificate_details(window, flags, cert));
 }
 
 
@@ -1187,6 +1193,22 @@ ASN1_time_to_localtime_str(ASN1_TIME* atime, char* to_buf, const unsigned buf_si
 }
 
 
+static int
+X509_check_cert_time(X509* cert)
+{
+	time_t now = time(NULL);
+	if (0 <= X509_cmp_time(X509_get_notBefore(cert), &now)) {
+		MAEMOSEC_DEBUG(1, "Certificate is not yet valid");
+		return(X509_V_ERR_CERT_NOT_YET_VALID);
+	}
+	if (0 >= X509_cmp_time(X509_get_notAfter(cert), &now)) {
+		MAEMOSEC_DEBUG(1, "Certificate has expired");
+		return(X509_V_ERR_CERT_HAS_EXPIRED);
+	}
+	return(0);
+}
+
+
 static void
 check_certificate(X509 *cert, int *self_signed, int *openssl_error)
 {
@@ -1202,12 +1224,15 @@ check_certificate(X509 *cert, int *self_signed, int *openssl_error)
 	csc = X509_STORE_CTX_new();
 	rc = X509_STORE_CTX_init(csc, tmp_store, cert, NULL);
 	
-	if (X509_verify_cert(csc) > 0) {
+	if (0 < X509_verify_cert(csc)) {
 		*self_signed = 1;
 	} else {
 		*openssl_error = csc->error;
 		MAEMOSEC_DEBUG(1, "Verification fails: %s", 
 					   X509_verify_cert_error_string(csc->error));
+		if (X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY == csc->error) {
+			*openssl_error = X509_check_cert_time(cert);
+		}
 	}
 	X509_STORE_CTX_free(csc);
 	X509_STORE_free(tmp_store);
@@ -1215,7 +1240,7 @@ check_certificate(X509 *cert, int *self_signed, int *openssl_error)
 
 
 static GtkWidget* 
-_create_infobox(X509* cert)
+_create_infobox(gpointer window, X509* cert)
 {
     gint row = 0;
     GtkWidget* infobox;
@@ -1256,8 +1281,16 @@ _create_infobox(X509* cert)
 						  X509_get_issuer_name(cert));
 		}
 		/*
-		 * TODO: Handle openssl error
+		 * Handle openssl error
 		 */
+		if (0 != openssl_error) {
+			MAEMOSEC_DEBUG(1, "Openssl error: %s", X509_verify_cert_error_string(openssl_error));
+			if (X509_V_ERR_CERT_NOT_YET_VALID == openssl_error
+				|| X509_V_ERR_CERT_HAS_EXPIRED == openssl_error)
+				hildon_banner_show_information (window, NULL, _("cert_nc_expired"));
+			else
+				hildon_banner_show_information (window, NULL, _("cert_error_install"));
+		}
 	}
 
 	/*
@@ -1794,25 +1827,11 @@ certmanui_certificate_expired_with_name
 		 | GTK_DIALOG_NO_SEPARATOR,
 		 NULL);
 
-#if 0
-    switch(type) {
-		case CERTMANUI_EXPIRED_DIALOG_EXPIRED:
-			buf = g_strdup_printf(_("cert_nc_expired"), cert_name);
-			break;
-		case CERTMANUI_EXPIRED_DIALOG_NOCA:
-			buf = g_strdup_printf(_("cert_nc_nocatovalidate"));
-			break;
-		case CERTMANUI_EXPIRED_DIALOG_NOCA_EXPIRED:
-			buf = g_strdup_printf
-				(_("cert_nc_nocatovalidateand_expired"), cert_name);
-			break;
-	}
-    expired_label = gtk_label_new(buf);
-    g_free(buf);
-    buf = NULL;
-#else
+	/*
+	 * Just show the name of the certificate 
+	 * that does not work
+	 */
 	expired_label = gtk_label_new(cert_name);
-#endif
     gtk_label_set_line_wrap(GTK_LABEL(expired_label), TRUE);
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(expired_dialog)->vbox),
                       expired_label);
@@ -1961,6 +1980,7 @@ _infonote_dialog_response(GtkDialog* dialog,
     if (params == NULL)
     {
         MAEMOSEC_ERROR("_infonote_dialog_response: wrong parameters");
+		return;
     }
 
     params->callback(TRUE, params->user_data);
@@ -2042,6 +2062,8 @@ cert_list_row_activated(GtkTreeView* tree,
 			const unsigned char* tmp = cert_der;
 			MAEMOSEC_DEBUG(1, "%s: decoded %d bytes", __func__, len);
 			cert = d2i_X509(NULL, &tmp, len);
+			if (NULL == cert)
+				MAEMOSEC_ERROR("Couldn't convert into a certificate");
 		} else {
 			MAEMOSEC_ERROR("%s: decoding failed", __func__);
 		}
@@ -2238,6 +2260,15 @@ certmanui_install_certificates_dialog(gpointer window,
 			continue;
 		}
 
+		{
+			int self_signed;
+			int openssl_error = 0;
+			check_certificate(cert, &self_signed, &openssl_error);
+			if (0 != openssl_error)
+				MAEMOSEC_ERROR("%s: '%s' : %s", __func__, namebuf, 
+							   X509_verify_cert_error_string(openssl_error));
+		}
+
 		cder = NULL;
 		len = i2d_X509(cert, &cder);
 		
@@ -2247,7 +2278,7 @@ certmanui_install_certificates_dialog(gpointer window,
 		}
 
 		b64cert = base64_encode(cder, len);
-		MAEMOSEC_ERROR("%s: encoded %d bytes", __func__, len);
+		MAEMOSEC_DEBUG(1, "%s: encoded %d bytes", __func__, len);
 
 		gtk_list_store_append(contents_store, &iter);
 		gtk_list_store_set(contents_store, &iter, 
@@ -2327,9 +2358,9 @@ ask_domains(gpointer window,
 										 | GTK_DIALOG_NO_SEPARATOR,
 										 NULL);
     hints.min_width  = MIN_WIDTH;
-    hints.min_height = MIN_HEIGHT;
+    hints.min_height = MIN_HEIGHT + 100;
     hints.max_width  = MAX_WIDTH;
-    hints.max_height = MAX_HEIGHT;
+    hints.max_height = MAX_HEIGHT + 100;
 
 	gtk_window_set_geometry_hints(GTK_WINDOW(*dialog), *dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
@@ -2337,6 +2368,29 @@ ask_domains(gpointer window,
 	bn_button = gtk_dialog_add_button(GTK_DIALOG(*dialog),
 									  _("cert_bd_trust_settings_ok"),
 									  GTK_RESPONSE_APPLY);
+
+	/*
+	 * This label is defined in specs but showing it leaves too little
+	 * room for the selection list, so it's commented out at the
+	 * moment.
+	 */
+#if 0
+	{
+		GtkWidget* entry_text;
+		gchar* info_text = g_strdup_printf(_("cert_ia_explain_trust%s"), "");
+		entry_text = gtk_label_new(info_text);
+		gtk_label_set_single_line_mode(entry_text, TRUE);
+		gtk_misc_set_padding(GTK_MISC(entry_text), 0, 0);
+		/* 
+		 * Make the widget as small as possible
+		 */
+		gtk_widget_set_size_request(GTK_WIDGET(entry_text), 0, 0);
+		MAEMOSEC_DEBUG(1, "Done everything to make the label as small as possible");
+		// gtk_label_set_line_wrap(GTK_LABEL(entry_text), FALSE);
+		gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), entry_text);
+		g_free(info_text);
+	}
+#endif
 
 	selector = (HildonTouchSelector*)hildon_touch_selector_new_text();
 	hildon_touch_selector_set_column_selection_mode
@@ -2347,8 +2401,9 @@ ask_domains(gpointer window,
 
 	panarea = hildon_pannable_area_new();
 	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
-										   (GtkWidget*)selector);
+										   (GtkWidget*)(selector));
 
+	gtk_widget_set_size_request(GTK_WIDGET(panarea), 0, 0);
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), panarea);
 
 	MAEMOSEC_DEBUG(1, "Show dialog");

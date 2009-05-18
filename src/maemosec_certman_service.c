@@ -237,11 +237,19 @@ osso_return_t osso_rpc_cb(const gchar *interface,
                           osso_rpc_t *retval)
 {
     gchar *fileuri = NULL;
-    osso_rpc_t val = g_array_index(args, osso_rpc_t, 0);
+    osso_rpc_t val;
 
-    g_assert(method);
+	if (NULL == interface || NULL == method || NULL == args || NULL == retval || 0 == args->len) {
+		/*
+		 * TODO: Add error dialog
+		 */
+		hildon_banner_show_information (GTK_WINDOW(top_aux), NULL, _("cert_error_install"));
+		MAEMOSEC_ERROR("Invalid osso_rpc call, probably not a certificate file");
+		return(OSSO_ERROR);
+	}
 
-    MAEMOSEC_DEBUG(1, "%s: '%s:%s'", __func__, interface, method);
+    MAEMOSEC_DEBUG(1, "%s: '%s:%s' %d %p", __func__, interface, method, args->len);
+	val = g_array_index(args, osso_rpc_t, 0);
 
     /* Catch the message and define what you want to do with it */
 
