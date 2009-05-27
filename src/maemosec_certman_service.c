@@ -11,7 +11,7 @@
 #include <gdk/gdkx.h>
 #include <glib/gprintf.h>
 #include <openssl/err.h>
-// #include <gconf/gconf-client.h>
+#include <libgnomevfs/gnome-vfs.h>
 
 #include <X11/Xlib.h>
 #include <X11/X.h>
@@ -240,10 +240,8 @@ osso_return_t osso_rpc_cb(const gchar *interface,
     osso_rpc_t val;
 
 	if (NULL == interface || NULL == method || NULL == args || NULL == retval || 0 == args->len) {
-		/*
-		 * TODO: Add error dialog
-		 */
-		hildon_banner_show_information (GTK_WINDOW(top_aux), NULL, _("cert_error_install"));
+		hildon_banner_show_information (top_aux, NULL, _("cert_error_install"));
+		// hildon_banner_show_information (GTK_WINDOW(top_aux), NULL, _("cert_error_install"));
 		MAEMOSEC_ERROR("Invalid osso_rpc call, probably not a certificate file");
 		return(OSSO_ERROR);
 	}
@@ -269,7 +267,7 @@ osso_return_t osso_rpc_cb(const gchar *interface,
 
 			if (!certmanui_import_file(NULL, fileuri, NULL, NULL)) {
 				MAEMOSEC_ERROR("Importing certificate failed");
-				hildon_banner_show_information (GTK_WINDOW(top_aux), NULL, _("cert_error_install"));
+				hildon_banner_show_information (top_aux, NULL, _("cert_error_install"));
 				// g_main_loop_quit(mainloop);
 				g_free(fileuri);
 				return(OSSO_ERROR);
@@ -389,8 +387,9 @@ int main(int argc, char* argv[])
     atom_c = _get_xatom_current_app_window();
     MAEMOSEC_DEBUG(1, "Got current app window");
 
-    if (atom_c) active_window = _get_window_property(root_window, atom_c);
-    else {
+    if (atom_c) {
+		active_window = _get_window_property(root_window, atom_c);
+    } else {
         MAEMOSEC_ERROR("Failed to get active_window");
         return OSSO_ERROR;
     }
@@ -450,7 +449,7 @@ _get_window_property(Window xwindow, Atom atom)
 								&format, 
 								&nitems,
                                 &bytes_after, 
-								(guchar **)&w);
+								(void*)&w);
     err = gdk_error_trap_pop();
 
     if (err != Success ||

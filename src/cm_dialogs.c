@@ -2,12 +2,7 @@
 
 #include "cm_dialogs.h"
 
-#define _BSD_SOURCE
-#define _XOPEN_SOURCE
-#define _USE_POSIX
-
 #include <libosso.h>
-// #include <osso-log.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
@@ -1210,6 +1205,17 @@ X509_check_cert_time(X509* cert)
 
 
 static void
+show_certificate_error(gpointer window, int openssl_error)
+{
+	if (X509_V_ERR_CERT_NOT_YET_VALID == openssl_error
+		|| X509_V_ERR_CERT_HAS_EXPIRED == openssl_error)
+		hildon_banner_show_information(window, NULL, _("cert_nc_expired"));
+	else
+		hildon_banner_show_information(window, NULL, _("cert_error_install"));
+}
+
+
+static void
 check_certificate(X509 *cert, int *self_signed, int *openssl_error)
 {
 	X509_STORE* tmp_store;
@@ -1231,6 +1237,11 @@ check_certificate(X509 *cert, int *self_signed, int *openssl_error)
 		MAEMOSEC_DEBUG(1, "Verification fails: %s", 
 					   X509_verify_cert_error_string(csc->error));
 		if (X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY == csc->error) {
+			/*
+			 * TODO: Is there a possibility that this would mask
+			 * other errors. X509_check_cert_time returns 0 if
+			 * the certificate is valide timewise.
+			 */
 			*openssl_error = X509_check_cert_time(cert);
 		}
 	}
@@ -1286,11 +1297,7 @@ _create_infobox(gpointer window, X509* cert, gchar** btn_label)
 		if (0 != openssl_error) {
 			MAEMOSEC_DEBUG(1, "Openssl error: %s", X509_verify_cert_error_string(openssl_error));
 			*btn_label = NULL;
-			if (X509_V_ERR_CERT_NOT_YET_VALID == openssl_error
-				|| X509_V_ERR_CERT_HAS_EXPIRED == openssl_error)
-				hildon_banner_show_information (window, NULL, _("cert_nc_expired"));
-			else
-				hildon_banner_show_information (window, NULL, _("cert_error_install"));
+			show_certificate_error(window, openssl_error);
 		}
 	}
 
@@ -1594,6 +1601,7 @@ create_password_dialog(gpointer window,
 
 	entry_text = gtk_label_new(greeting);
 	gtk_label_set_line_wrap(GTK_LABEL(entry_text), TRUE);
+	gtk_misc_set_alignment(GTK_MISC(entry_text), 0.0, 0.5);
 	gtk_container_add(
         GTK_CONTAINER(GTK_DIALOG(passwd_dialog)->vbox),
         entry_text);
@@ -1618,8 +1626,7 @@ create_password_dialog(gpointer window,
 #endif
         name = NULL;
 
-        gtk_misc_set_alignment(GTK_MISC(name_label),
-                               0.0, 0.5);
+        gtk_misc_set_alignment(GTK_MISC(name_label), 0.0, 0.5);
 
         gtk_container_add(
             GTK_CONTAINER(GTK_DIALOG(passwd_dialog)->vbox),
@@ -2205,7 +2212,7 @@ certmanui_install_certificates_dialog(gpointer window,
     GtkTreeIter iter;
 	GdkGeometry hints;
 	char namebuf[255];
-	int i, rc;
+	int i, rc, g_openssl_error = 0;
 	gint ret;
 	gboolean result = FALSE;
 	const gchar *cert_type;
@@ -2229,10 +2236,6 @@ certmanui_install_certificates_dialog(gpointer window,
 								  install_dialog, 
 								  &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
-
-	bn_install = gtk_dialog_add_button(GTK_DIALOG(install_dialog),
-									  _("cert_bd_cd_install"), 
-									  GTK_RESPONSE_APPLY);
 
 	_create_certificate_list(&scroller, &contents_list, &contents_store);
 
@@ -2265,9 +2268,12 @@ certmanui_install_certificates_dialog(gpointer window,
 			int self_signed;
 			int openssl_error = 0;
 			check_certificate(cert, &self_signed, &openssl_error);
-			if (0 != openssl_error)
+			if (0 != openssl_error) {
+				if (0 == g_openssl_error)
+					g_openssl_error = openssl_error;
 				MAEMOSEC_ERROR("%s: '%s' : %s", __func__, namebuf, 
 							   X509_verify_cert_error_string(openssl_error));
+			}
 		}
 
 		cder = NULL;
@@ -2304,6 +2310,14 @@ certmanui_install_certificates_dialog(gpointer window,
 						   -1);
 		free(b64cert);
 		OPENSSL_free(cder);
+	}
+	
+	if (0 == g_openssl_error) {
+		bn_install = gtk_dialog_add_button(GTK_DIALOG(install_dialog),
+										   _("cert_bd_cd_install"), 
+										   GTK_RESPONSE_APPLY);
+	} else {
+		show_certificate_error(window, g_openssl_error);
 	}
 
 	MAEMOSEC_DEBUG(1, "Add pan area");
@@ -2369,29 +2383,6 @@ ask_domains(gpointer window,
 	bn_button = gtk_dialog_add_button(GTK_DIALOG(*dialog),
 									  _("cert_bd_trust_settings_ok"),
 									  GTK_RESPONSE_APPLY);
-
-	/*
-	 * This label is defined in specs but showing it leaves too little
-	 * room for the selection list, so it's commented out at the
-	 * moment.
-	 */
-#if 0
-	{
-		GtkWidget* entry_text;
-		gchar* info_text = g_strdup_printf(_("cert_ia_explain_trust%s"), "");
-		entry_text = gtk_label_new(info_text);
-		gtk_label_set_single_line_mode(entry_text, TRUE);
-		gtk_misc_set_padding(GTK_MISC(entry_text), 0, 0);
-		/* 
-		 * Make the widget as small as possible
-		 */
-		gtk_widget_set_size_request(GTK_WIDGET(entry_text), 0, 0);
-		MAEMOSEC_DEBUG(1, "Done everything to make the label as small as possible");
-		// gtk_label_set_line_wrap(GTK_LABEL(entry_text), FALSE);
-		gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), entry_text);
-		g_free(info_text);
-	}
-#endif
 
 	selector = (HildonTouchSelector*)hildon_touch_selector_new_text();
 	hildon_touch_selector_set_column_selection_mode

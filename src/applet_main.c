@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <string.h>
 #include <hildon/hildon.h>
+#include <openssl/err.h>
 #include <maemosec_common.h>
 #include <maemosec_certman.h>
 

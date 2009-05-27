@@ -3,6 +3,11 @@
 #ifndef CM_DIALOGS_H
 #define CM_DIALOGS_H
 
+/*
+ * This is needed to make localtime_r visible
+ */
+#define _XOPEN_SOURCE
+
 #include <gtk/gtk.h>
 #define __HILDON_REMOTE_TEXTURE_H__
 #include <hildon/hildon.h>
