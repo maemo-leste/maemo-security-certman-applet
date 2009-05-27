@@ -753,7 +753,7 @@ static gboolean _certificate_details(gpointer window,
    @param cert_id       ID for given certificate, or 0, if cert is provided
    @param cert          Certificate, if no cert_id is 0.
 */
-static GtkWidget* _create_infobox(gpointer window, X509* cert);
+static GtkWidget* _create_infobox(gpointer window, X509* cert, gchar** btn_label);
 
 /**
    Adds labels to the given table.
@@ -873,7 +873,7 @@ _certificate_details(gpointer window,
 
 	}
 
-    infobox = _create_infobox(window, cert);
+    infobox = _create_infobox(window, cert, &btn_label);
 
     /* Unable to open certificate, give error and exit */
     if (infobox == NULL)
@@ -881,7 +881,7 @@ _certificate_details(gpointer window,
 		MAEMOSEC_DEBUG(1, "Failed to create infobox");
         hildon_banner_show_information (window, NULL, _("cert_error_open"));
 		gtk_widget_destroy(cert_dialog);
-        return FALSE;
+        return(FALSE);
     }
 
     /* Put infobox in a scroller and add that to dialog */
@@ -1240,7 +1240,7 @@ check_certificate(X509 *cert, int *self_signed, int *openssl_error)
 
 
 static GtkWidget* 
-_create_infobox(gpointer window, X509* cert)
+_create_infobox(gpointer window, X509* cert, gchar** btn_label)
 {
     gint row = 0;
     GtkWidget* infobox;
@@ -1285,6 +1285,7 @@ _create_infobox(gpointer window, X509* cert)
 		 */
 		if (0 != openssl_error) {
 			MAEMOSEC_DEBUG(1, "Openssl error: %s", X509_verify_cert_error_string(openssl_error));
+			*btn_label = NULL;
 			if (X509_V_ERR_CERT_NOT_YET_VALID == openssl_error
 				|| X509_V_ERR_CERT_HAS_EXPIRED == openssl_error)
 				hildon_banner_show_information (window, NULL, _("cert_nc_expired"));
@@ -2444,8 +2445,10 @@ certmanui_import_file(gpointer window,
 	gchar* password = NULL;
 	bool do_install;
 
-	if (!extract_envelope(window, fileuri, &certs, &pkey, &password))
+	if (!extract_envelope(window, fileuri, &certs, &pkey, &password)) {
+		MAEMOSEC_ERROR("Invalid certificate file '%s'", fileuri);
 		return(FALSE);
+	}
 
 	if (NULL == pkey && 1 == sk_X509_num(certs)) {
 		/*

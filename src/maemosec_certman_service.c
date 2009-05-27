@@ -255,7 +255,7 @@ osso_return_t osso_rpc_cb(const gchar *interface,
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_TOP_APPLICATION) == 0) {
         gtk_window_present(GTK_WINDOW(top_aux));
-        return OSSO_OK;
+        return(OSSO_OK);
     }
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_MIME_OPEN) == 0) {
@@ -269,9 +269,10 @@ osso_return_t osso_rpc_cb(const gchar *interface,
 
 			if (!certmanui_import_file(NULL, fileuri, NULL, NULL)) {
 				MAEMOSEC_ERROR("Importing certificate failed");
-				g_main_loop_quit(mainloop);
+				hildon_banner_show_information (GTK_WINDOW(top_aux), NULL, _("cert_error_install"));
+				// g_main_loop_quit(mainloop);
 				g_free(fileuri);
-				return OSSO_ERROR;
+				return(OSSO_ERROR);
 			}
 			MAEMOSEC_DEBUG(1, "Imported");
 
@@ -281,12 +282,12 @@ osso_return_t osso_rpc_cb(const gchar *interface,
 
             retval->type = DBUS_TYPE_BOOLEAN;
             retval->value.b = TRUE;
-            return OSSO_OK;
+            return(OSSO_OK);
         } else {
 			MAEMOSEC_ERROR("%s: invalid message", __func__);
 		}
     }
-    return OSSO_ERROR;
+    return(OSSO_ERROR);
 }
 
 /* Do initialization for OSSO, create osso context, set topping callback,
