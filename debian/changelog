@@ -1,8 +1,14 @@
 maemo-security-certman-applet (0.0.8) unstable; urgency=low
   
-  * Working
+  * Implemented install from unencrypted, simple PKCS#7 containers.
+  * Allowed deletion of invalid certificates.
+  * Fixed the alignment in password query.
+      Fixes: NB#118031
+  * Stopped using string cert_li_certificate_user_key so that a new
+    release of the UI spec can be approved, that replaces the string
+    with an icon.
 
- -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Mon, 25 May 2009 17:00:00 +0300
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 05 Jun 2009 15:05:31 +0300
 
 maemo-security-certman-applet (0.0.7) unstable; urgency=low
   

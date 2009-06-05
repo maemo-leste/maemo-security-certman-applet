@@ -39,6 +39,7 @@ determine_filetype(FILE* fp, void** idata)
 {
 	X509* cert;
 	PKCS12* cont;
+	PKCS7* pkcs7_cont;
 
 	rewind(fp);
 	cert = PEM_read_X509(fp, NULL, 0, NULL);
@@ -63,6 +64,28 @@ determine_filetype(FILE* fp, void** idata)
 		return("PKCS12");
 	} else
 		MAEMOSEC_DEBUG(1, "Not a PKCS12 file");
+
+	/*
+	 * Only support unencrypted PKCS#7 files at the moment.
+	 * Shouldn't be too hard to add decryption either.
+	 */
+	rewind(fp);
+	pkcs7_cont = PEM_read_PKCS7(fp, NULL, NULL, NULL);
+	if (pkcs7_cont) {
+		*idata = (void*)pkcs7_cont;
+		return("PKCS7");
+	} else {
+		MAEMOSEC_DEBUG(1, "Not a PKCS7 PEM file");
+	}
+
+	rewind(fp);
+	pkcs7_cont = d2i_PKCS7_fp(fp, NULL);
+	if (pkcs7_cont) {
+		*idata = (void*)pkcs7_cont;
+		return("PKCS7");
+	} else {
+		MAEMOSEC_DEBUG(1, "Not a PKCS7 DER file");
+	}
 
 	// TODO: Bare key file "evp.h"
 
@@ -265,6 +288,10 @@ extract_envelope(gpointer window,
 	const char* filetype;
 	void* idata;
 
+	*certs = NULL;
+	*pkey = NULL;
+	*password = NULL;
+
 	if (GNOME_VFS_OK != _uri_to_temp(fileuri, &fp)) {
 		MAEMOSEC_ERROR("Cannot open '%s'", fileuri);
 		return(FALSE);
@@ -275,15 +302,13 @@ extract_envelope(gpointer window,
 	else
 		shortname++;
 	filetype = determine_filetype(fp, &idata);
+
 	MAEMOSEC_DEBUG(1, "'%s' seems to be '%s'", shortname, filetype);
 
 	/*
 	 * TODO: Are there envelopes that can contain more than
 	 * one private key? Is there a STACK_OF(EVP_PKEY)?
 	 */
-
-	*pkey = NULL;
-	*password = NULL;
 
 	if (0 == strcmp(filetype, "PKCS12")) {
 		X509* cert = NULL;
@@ -332,6 +357,27 @@ extract_envelope(gpointer window,
 	{
 		*certs = sk_X509_new_null();
 		sk_X509_push(*certs, (X509*)idata);
+		return(TRUE);
+
+	} else if (0 == strcmp(filetype, "PKCS7")) {
+		PKCS7* p7 = (PKCS7*)idata;
+		/*
+		 * Code borrowed from apps/pkcs7.c
+		 * TODO: Verify the PKCS7 signature and all that...
+		 */
+		switch (OBJ_obj2nid(p7->type)) 
+			{
+			case NID_pkcs7_signed:
+				*certs=p7->d.sign->cert;
+				break;
+			case NID_pkcs7_signedAndEnveloped:
+				*certs=p7->d.signed_and_enveloped->cert;
+				break;
+			default:
+				PKCS7_free(p7);
+				return(FALSE);
+				break;
+			}
 		return(TRUE);
 
 	} else {

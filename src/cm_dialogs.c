@@ -879,6 +879,12 @@ _certificate_details(gpointer window,
         return(FALSE);
     }
 
+	/*
+	 * Allow deleting invalid certificates
+	 */
+	if (NULL == btn_label && MAEMOSEC_CERTMAN_DOMAIN_PRIVATE == domain_flags)
+		btn_label = _("cert_bd_c_delete");
+
     /* Put infobox in a scroller and add that to dialog */
     scroller = create_scroller(infobox);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller),
@@ -2300,7 +2306,11 @@ certmanui_install_certificates_dialog(gpointer window,
 		if (X509_check_ca(cert)) {
 			cert_type = "cert_li_certificate_signing";
 		} else if (NULL != pkey) {
-			cert_type = "cert_li_certificate_user_key";
+			/*
+			 * TODO: Add a key icon to denote the existence of
+			 * a private key.
+			 */
+			cert_type = "cert_li_certificate_user";
 		} else {
 			cert_type = "cert_li_certificate_user";
 		}
@@ -2437,7 +2447,8 @@ certmanui_import_file(gpointer window,
 	bool do_install;
 
 	if (!extract_envelope(window, fileuri, &certs, &pkey, &password)) {
-		MAEMOSEC_ERROR("Invalid certificate file '%s'", fileuri);
+		if (NULL == password)
+			MAEMOSEC_ERROR("Invalid certificate file '%s'", fileuri);
 		return(FALSE);
 	}
 
@@ -2452,13 +2463,17 @@ certmanui_import_file(gpointer window,
 		confirmation_text = "cert_ib_installed_certificate";
 	} else {
 		/* 
-		 * A packet of many certificates
+		 * A packet of many certificates or a user-cert+private key
+		 * combo.
 		 */
 		do_install = certmanui_install_certificates_dialog
 			(window, certs, pkey);
 		MAEMOSEC_DEBUG(1, "certmanui_install_certificates_dialog=%d", 
 					   do_install);
-		confirmation_text = "cert_ib_installed_certificates";
+		if (1 == sk_X509_num(certs))
+			confirmation_text = "cert_ib_installed_certificate";
+		else
+			confirmation_text = "cert_ib_installed_certificates";
 	}
 
 	if (!do_install)
