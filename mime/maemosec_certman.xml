@@ -14,6 +14,8 @@
      <glob pattern="*.cRT"/>
      <glob pattern="*.crT"/>
      <glob pattern="*.CER"/>
+     <glob pattern="*.p7b"/>
+     <glob pattern="*.P7B"/>
      <generic-icon name="package-x-generic"/>
    </mime-type>
 </mime-info>
