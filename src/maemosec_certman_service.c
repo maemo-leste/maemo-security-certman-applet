@@ -48,6 +48,11 @@ GtkWidget *top_aux = NULL;
 
 osso_context_t *osso_g = NULL;
 
+/*
+ * Send certificate name to get_privatekey by a global variable!
+ */
+gchar *cert_name = NULL;
+
 gboolean _quit_clean(gpointer pointer);
 
 #define OSSO_CM_SERVICE "com.nokia.certman"
@@ -56,6 +61,7 @@ gboolean _quit_clean(gpointer pointer);
 
 #define DBUS_METHOD_MIME_OPEN       "mime_open"
 #define DBUS_METHOD_TOP_APPLICATION "top_application"
+#define DBUS_METHOD_GET_KEY_PASSWORD "get_key_password"
 
 /* Define d-bus messages, to which application have to react */
 /* For instance game application needs methods to start, continue, restart,
@@ -66,46 +72,11 @@ gboolean _quit_clean(gpointer pointer);
 /* Testing d-bus messaging with displaying infoprint */
 #define OSSO_CM_DISPLAY_INFOPRINT "certman_display_infoprint"
 
-void osso_top_callback(const gchar *arguments, gpointer *window);
-
-gboolean set_dbus_handler(osso_rpc_cb_f *func);
-
-/**
-    Receive D-BUS messages and handle them
-
-    @param interface The interface of the called method.
-    @param method The method that was called.
-    @param arguments A GArray of osso_rpc_t_structures.
-    @param data An application specific pointer.
-    @param retval The return value of the method.
-    @returns gint value
-*/
-gint dbus_req_handler(const gchar *interface,
-                      const gchar *method,
-                      GArray *arguments,
-                      gpointer app_data,
-                      osso_rpc_t *retval);
-
 osso_return_t osso_rpc_cb(const gchar *interface,
                           const gchar *method,
                           GArray *args,
                           gpointer data,
                           osso_rpc_t *retval);
-
-
-/* Handles incoming D-BUS message
-
-@param method The method that was called.
-@param arguments A GArray of osso_rpc_t structures.
-@param data An application specific pointer.
-@param retval The return value of the method.
-@returns gint value
-*/
-gint dbus_message_handler(const gchar *method,
-                          GArray *arguments,
-                          gpointer app_data,
-                          osso_rpc_t *retval);
-
 
 /**
    Set hardware event handler
@@ -129,16 +100,6 @@ gboolean set_hw_event_handler(osso_hw_state_t *state,
 void hw_event_handler(osso_hw_state_t *state, gpointer data);
 
 /**
-   Osso topping callback
-
-   @param arguments Extra parameters
-   @param app_data Application specific data
-*/
-/**
-   void osso_top_callback(const gchar *arguments, AppData *app_data);
-*/
-
-/**
    Initialize osso
 
    @param app Application specific data
@@ -154,60 +115,6 @@ gboolean osso_init(osso_context_t **osso);
 */
 
 gboolean osso_deinit(osso_context_t *osso);
-
-
-gint dbus_req_handler(const gchar *interface, const gchar *method,
-                      GArray *arguments, gpointer data,
-                      osso_rpc_t *retval)
-{
-    MAEMOSEC_DEBUG(1, "%s: %s", __func__, interface);
-    return dbus_message_handler(method, arguments, data, retval);
-}
-
-gint dbus_message_handler(const gchar *method, GArray *arguments,
-                          gpointer data, osso_rpc_t *retval)
-{
-    gchar *fileuri = NULL;
-
-    osso_rpc_t val = g_array_index(arguments, osso_rpc_t, 0);
-
-    (void) arguments;
-    g_assert(method);
-
-    MAEMOSEC_DEBUG(1, "dbus: method '%s' called", method);
-
-    /* Catch the message and define what you want to do with it */
-
-    if (g_ascii_strcasecmp(method, DBUS_METHOD_TOP_APPLICATION) == 0) {
-
-        MAEMOSEC_DEBUG(1, "Got method 'mime_open' with method '%s'",
-                   DBUS_METHOD_TOP_APPLICATION);
-        gtk_window_present(GTK_WINDOW(top_aux));
-        return OSSO_OK;
-    }
-
-    if (g_ascii_strcasecmp(method, DBUS_METHOD_MIME_OPEN) == 0) {
-        MAEMOSEC_DEBUG(1, "Got method 'mime_open' with method '%s'",
-                   DBUS_METHOD_MIME_OPEN);
-
-        if ( (val.type == DBUS_TYPE_STRING)
-             && (val.value.s != NULL) ) 
-		{
-            fileuri = g_strdup(val.value.s);
-            MAEMOSEC_DEBUG(1, "%s: mime_open '%s'", __func__, fileuri);
-            certmanui_import_file(GTK_WINDOW(top_aux), fileuri, NULL, NULL);
-            g_free(fileuri);
-            gtk_main_quit();
-            retval->type = DBUS_TYPE_BOOLEAN;
-            retval->value.b = TRUE;
-            return OSSO_OK;
-        }
-
-    } else {
-		MAEMOSEC_ERROR("Unknown dbus method '%s'", method);
-    }
-    return(DBUS_TYPE_INVALID);
-}
 
 
 /* Depending on the state of hw, do something */
@@ -230,11 +137,12 @@ void hw_event_handler(osso_hw_state_t *state, gpointer data)
     }
 }
 
-osso_return_t osso_rpc_cb(const gchar *interface,
-                          const gchar *method,
-                          GArray *args,
-                          gpointer data,
-                          osso_rpc_t *retval)
+osso_return_t 
+osso_rpc_cb(const gchar *interface,
+			const gchar *method,
+			GArray *args,
+			gpointer data,
+			osso_rpc_t *retval)
 {
     gchar *fileuri = NULL;
     osso_rpc_t val;
@@ -254,6 +162,43 @@ osso_return_t osso_rpc_cb(const gchar *interface,
     if (g_ascii_strcasecmp(method, DBUS_METHOD_TOP_APPLICATION) == 0) {
         gtk_window_present(GTK_WINDOW(top_aux));
         return(OSSO_OK);
+    }
+
+    if (g_ascii_strcasecmp(method, DBUS_METHOD_GET_KEY_PASSWORD) == 0) {
+		EVP_PKEY* pkey;
+		gchar* password = NULL;
+		maemosec_key_id key_id;
+		osso_rpc_t name = g_array_index(args, osso_rpc_t, 1);
+		int rc;
+
+		MAEMOSEC_DEBUG(1, "Get password for key \"%s\"", val.value.s);
+
+		if (1 < args->len) {
+			name = g_array_index(args, osso_rpc_t, 1);
+			if (DBUS_TYPE_STRING == name.type)
+				cert_name = name.value.s;
+		}
+
+		rc = maemosec_certman_str_to_key_id(val.value.s, key_id);
+		if (0 == rc) {
+			pkey = certmanui_get_privatekey(GTK_WINDOW(top_aux), key_id, &password,
+											NULL, NULL);
+			cert_name = NULL;
+            g_main_loop_quit(mainloop);
+			if (NULL != pkey) {
+				retval->type = DBUS_TYPE_STRING;
+				retval->value.s = password;
+				EVP_PKEY_free(pkey);
+				return(OSSO_OK);
+			} else {
+				MAEMOSEC_ERROR("%s: no password");
+				return(OSSO_ERROR);
+			}
+		} else {
+			cert_name = NULL;
+			MAEMOSEC_ERROR("%s: invalid key id '%s'", val.value.s);
+			return(OSSO_ERROR);
+		}
     }
 
     if (g_ascii_strcasecmp(method, DBUS_METHOD_MIME_OPEN) == 0) {
@@ -288,10 +233,13 @@ osso_return_t osso_rpc_cb(const gchar *interface,
     return(OSSO_ERROR);
 }
 
-/* Do initialization for OSSO, create osso context, set topping callback,
-   dbus-message handling callbacks, and hw-event callbacks. TODO: System
-   bus still not seem working well, so HW-event callbacks not tested */
-gboolean osso_init(osso_context_t **osso)
+/* 
+ * Do initialization for OSSO, create osso context, set topping callback,
+ * dbus-message handling callbacks, and hw-event callbacks. TODO: System
+ * bus still not seem working well, so HW-event callbacks not tested 
+ */
+gboolean 
+osso_init(osso_context_t **osso)
 {
     osso_return_t ret;
 
@@ -348,7 +296,8 @@ gboolean osso_deinit(osso_context_t *osso)
                         "com.nokia.certman",
                         "/com/nokia/certman",
                         "com.nokia.certman",
-                        dbus_req_handler, NULL);
+                        (osso_rpc_cb_f *)osso_rpc_cb,
+						NULL);
 
     osso_hw_unset_event_cb(osso, NULL);
 

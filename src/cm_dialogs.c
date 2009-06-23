@@ -1430,6 +1430,8 @@ GtkWidget* enter_passwd_dialog = NULL;
 /* defined in importexport.c */
 extern gboolean close_store_on_exit;
 
+/* This is terrible! */
+extern gchar *cert_name;
 
 EVP_PKEY* 
 certmanui_get_privatekey(gpointer window, 
@@ -1457,7 +1459,7 @@ certmanui_get_privatekey(gpointer window,
     enter_passwd_dialog = create_password_dialog(window,
                                                  cert,
                                                  _("cert_ti_enter_password"),
-												 "",
+												 cert_name?cert_name:"",
                                                  _("cert_ia_password"),
                                                  dgettext("hildon-libs", "wdgt_bd_done"),
                                                  "",
