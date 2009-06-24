@@ -194,10 +194,16 @@ const struct pkcs12_target pkcs12_targets [] = {
 		.symbolic_name = "cert_nc_purpose_email_smime", 
 		.domain_name = "smime" 
 	},
+#if 0
+	/* 
+	 * X.509 is not used for package signing according to
+	 * the current plan.
+	 */
 	{
 		.symbolic_name = "cert_nc_purpose_software_signing", 
 		.domain_name = "ssign"
 	},
+#endif
 	{
 		.symbolic_name = NULL,
 		.domain_name = NULL
@@ -991,35 +997,10 @@ get_fingerprint(X509 *of_cert,
 	char *digest_name, *hto;
 
 	/*
-	 * DEBUG: Warn about MD5-based signatures
+	 * Just show the SHA1 fingerprint always-
 	 */
-	if (of_cert && of_cert->sig_alg && of_cert->sig_alg->algorithm) {
-		i2t_ASN1_OBJECT((char*)digest_bin, 
-						sizeof(digest_bin), 
-						of_cert->sig_alg->algorithm);
-		digest_bin[sizeof(digest_bin)-1] = '\0';
-		MAEMOSEC_DEBUG(1, "signed by %s", digest_bin);
-		for (hto = (char*)digest_bin; *hto; hto++)
-			*hto = toupper(*hto);
-	} else {
-		MAEMOSEC_ERROR("Unknown signature algorithm");
-		return(0);
-	}
-
-	if (0 == memcmp("MD5", digest_bin, strlen("MD5"))) {
-		of_type = EVP_md5();
-		digest_name = "MD5";
-	} else if (0 == memcmp("MD2", digest_bin, strlen("MD2"))) {
-		of_type = EVP_md2();
-		digest_name = "MD2";
-	} else {
-		/*
-		 * TODO: What about sha256/384/512 and other more
-		 * secure hashes?
-		 */
-		of_type = EVP_sha1();
-		digest_name = "SHA1";
-	}
+	of_type = EVP_sha1();
+	digest_name = "SHA1";
 	MAEMOSEC_DEBUG(1, "Compute %s fingerprint", digest_name);
 	*use_type = (EVP_MD*)of_type;
 
@@ -1092,7 +1073,10 @@ set_multiline_value(GtkWidget* infobox, gint* row, const char* label, const char
 
 
 static const int fullname_components [] = {
-		NID_commonName, NID_organizationalUnitName, NID_organizationName
+	NID_pkcs9_emailAddress, 
+	NID_commonName, 
+	NID_organizationalUnitName, 
+	NID_organizationName
 };
 
 struct cb_info {
@@ -1110,6 +1094,7 @@ add_name_component(unsigned char* text, void* ctx)
 	 * Do not add empty components.
 	 */
 	if (NULL != text && strlen((char*)text) && NULL != ctx) {
+		MAEMOSEC_DEBUG(1, "Add name component '%s=%s'", lctx->label, text);
 		_add_labels(GTK_TABLE(lctx->infobox),
 					lctx->row,
 					lctx->label, 

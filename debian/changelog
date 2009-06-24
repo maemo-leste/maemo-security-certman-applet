@@ -1,14 +1,31 @@
 maemo-security-certman-applet (0.0.8) unstable; urgency=low
   
+  * Implemented client certificate handling with some limitations
+    (only RSA keys and signature types CKM_RSA_PKCS and CKM_SHA1_RSA_PKCS
+     supported).
+      Fixes: NB#122943
+      Fixes: NB#107774
   * Implemented install from unencrypted, simple PKCS#7 containers.
   * Allowed deletion of invalid certificates.
+  * Prevented installation of invalid certificates.
+      Fixes: NB#121605
   * Fixed the alignment in password query.
       Fixes: NB#118031
   * Stopped using string cert_li_certificate_user_key so that a new
     release of the UI spec can be approved, that replaces the string
     with an icon.
+      Fixes: NB#118037
+  * Just show the SHA1 fingerprint for all kinds of certificates
+      Fixes: NB#122902
+      Fixes: NB#122909
+  * Removed code signing from certificate uses. X.509 is not used for
+    package signing at least in Fremantle.
+      Fixes: NB#122904
+      Fixes: NB#115578
+  * Show NID_pkcs9_emailAddress name component in certificate details
+      Fixes: NB#122922
 
- -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 05 Jun 2009 15:05:31 +0300
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Thu, 24 Jun 2009 15:05:31 +0300
 
 maemo-security-certman-applet (0.0.7) unstable; urgency=low
   
