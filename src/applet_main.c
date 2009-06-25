@@ -34,6 +34,11 @@ GtkWidget* main_dialog = NULL;
 extern osso_context_t *osso_global;
 X509_STORE* root_store = NULL;
 
+/*
+ * Send certificate name to get_privatekey by a global variable!
+ */
+gchar *cert_name = NULL;
+
 /**
  * Definition of execute interface for Certman applet, used by any calling
  * application (primary user: Control Panel application).
@@ -74,17 +79,6 @@ execute(osso_context_t * osso,
 	ret = maemosec_certman_open(&root_store);
 	MAEMOSEC_DEBUG(1, "maemosec_certman_open returned %d", ret);
 
-    /*
-      settings_init();
-
-      if (get_configuration(NULL) == OSSO_ERROR)
-      {
-      gtk_infoprint(GTK_WINDOW(data), "Unable to open CST storage");
-      ULOG_CRIT_L("Unable to load configuration..");
-      _quit(main_dialog);
-      return OSSO_ERROR;
-      }
-    */
     /* Create the main dialog and refresh it */
     main_dialog = ui_create_main_dialog(data);
 
@@ -95,25 +89,15 @@ execute(osso_context_t * osso,
     }
 
     /* Run dialog */
-    while (ret != CM_RESPONSE_CLOSE &&
-           ret != GTK_RESPONSE_DELETE_EVENT &&
+    while (ret != GTK_RESPONSE_DELETE_EVENT &&
            ret != GTK_RESPONSE_CANCEL)
     {
         ret = gtk_dialog_run(GTK_DIALOG(main_dialog));
 
     }
 
-    /* Check response code from the dialog */
-    if (ret == CM_RESPONSE_CLOSE)
-    {
-        if (tret == OSSO_ERROR) {
-            MAEMOSEC_ERROR("Unable to save configuration..");
-        }
-    }
-
     /* Quit */
     _quit(main_dialog);
-
 
     /* If response from dialog was ok, return tret */
     if (ret == GTK_RESPONSE_OK)

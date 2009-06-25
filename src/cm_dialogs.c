@@ -39,11 +39,39 @@ enum {
     MAIN_NUM_COLUMNS
 };
 
+/* Size for the main dialog */
+#define MIN_WIDTH               592
+#define MIN_HEIGHT              360
+#define MAX_WIDTH               800
+#define MAX_HEIGHT              360
+
+/* Size for the details dialog */
+#define DETAILS_MIN_WIDTH       482
+#define DETAILS_MIN_HEIGHT      360
+#define DETAILS_MAX_WIDTH       800
+#define DETAILS_MAX_HEIGHT      360
+
+/* Size for the change password dialog */
+#define PASSWD_MIN_WIDTH        352
+#define PASSWD_MIN_HEIGHT       -1
+#define PASSWD_MAX_WIDTH        800
+#define PASSWD_MAX_HEIGHT       -1
+
+/* Buffer size for various string routines */
+#define BUFSIZE                 256
+
+#define ICONSIZE                HILDON_ICON_PIXEL_SIZE_SMALL
+#define REFRESH_INTERVAL        500
+
+#define NAME_COL_WIDTH          340
+#define ISSUE_COL_WIDTH         170
+#define PURPOSE_COL_WIDTH       120
+
+
 /* Local interface */
 
 static void 
-_create_certificate_list(GtkWidget** scroller,
-						 GtkWidget** list,
+_create_certificate_list(GtkWidget** list,
 						 GtkListStore** list_store);
 
 struct populate_context {
@@ -131,41 +159,10 @@ typedef struct {
 
 GtkWidget* cert_list = NULL;
 GtkListStore* cert_list_store = NULL;
-GtkWidget* cert_scroller = NULL;
 osso_context_t *osso_global;
 GtkWindow* g_window = NULL;
 static int flip_flop = 0;
-
-/** Parameter for row_activated callback */
-typedef struct {
-	GtkTreeView* view;
-	GtkListStore* list;
-	GtkTreeIter iter;
-	gboolean iter_valid;
-	AuthType type;
-	GtkWidget* view_button;
-	GtkWidget* import_button;
-	GtkWidget* export_button;
-} RowParameter;
-
-/** Parameter for some of the button callbacks */
-typedef struct {
-	RowParameter* rows;
-	GtkNotebook* notebook;
-	gpointer dialog;
-	gpointer data;
-} ButtonParameter;
-
-/** Parameters for the row-activated callbacks */
-typedef struct {
-	gint id_col;
-	gboolean simple;
-} RowActivatedParameter;
-
-/* Other globals */
 GdkGeometry hints;
-RowParameter row_params[2];
-ButtonParameter button_param;
 
 /*
  * There are eight predefined certificate stores that
@@ -282,8 +279,7 @@ ui_create_main_dialog(gpointer window)
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 	MAEMOSEC_DEBUG(1, "Set geometry hints");
 
-    _create_certificate_list(&cert_scroller,
-                             &cert_list,
+    _create_certificate_list(&cert_list,
                              &cert_list_store);
 	MAEMOSEC_DEBUG(1, "Created certificate lists");
 
@@ -294,6 +290,14 @@ ui_create_main_dialog(gpointer window)
 					 "row-activated",
                      G_CALLBACK(cert_list_row_activated),
                      cert_list_store);
+
+	/*
+	 * Is this what is needed to fix NB#122467: treeview is not direct child
+	 * of pannable area? Obviously not.
+	 */
+	MAEMOSEC_DEBUG(1, "%s: add cert_list to panarea", __func__);
+	gtk_container_add(GTK_CONTAINER(panarea), cert_list);
+	MAEMOSEC_DEBUG(1, "%s: added cert_list to panarea", __func__);
 
 	MAEMOSEC_DEBUG(1, "Populate user certificates");
 	pc.store = cert_list_store;
@@ -634,8 +638,7 @@ _add_row_header(GtkListStore *list_store,
 
 
 static void 
-_create_certificate_list(GtkWidget** scroller,
-						 GtkWidget** list,
+_create_certificate_list(GtkWidget** list,
 						 GtkListStore** list_store)
 {
     GtkCellRenderer* renderer = NULL;
@@ -916,7 +919,6 @@ _certificate_details(gpointer window,
     if (requisition.width + HILDON_MARGIN_DOUBLE * 5 > DETAILS_MIN_WIDTH)
     {
         hints.min_width  = requisition.width + HILDON_MARGIN_DOUBLE * 5;
-
         if (hints.min_width > hints.max_width)
         {
             hints.max_width = hints.min_width;
@@ -2199,7 +2201,6 @@ certmanui_install_certificates_dialog(gpointer window,
 	GtkWidget* install_dialog = NULL;
 	GtkListStore* contents_store = NULL;
 	GtkWidget* contents_list = NULL;
-	GtkWidget* scroller = NULL;
 	GtkWidget *panarea = NULL;
 	GtkWidget *bn_install = NULL;
     GtkTreeIter iter;
@@ -2230,7 +2231,7 @@ certmanui_install_certificates_dialog(gpointer window,
 								  &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
-	_create_certificate_list(&scroller, &contents_list, &contents_store);
+	_create_certificate_list(&contents_list, &contents_store);
 
 	panarea = hildon_pannable_area_new();
 	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
@@ -2336,9 +2337,6 @@ certmanui_install_certificates_dialog(gpointer window,
 	} while (GTK_RESPONSE_DELETE_EVENT != ret);
 
     gtk_widget_hide_all(install_dialog);
-
-    gtk_widget_destroy(scroller);
-    scroller = NULL; 
 
 	gtk_widget_destroy(install_dialog);
 	if (bn_install)
