@@ -34,11 +34,6 @@ GtkWidget* main_dialog = NULL;
 extern osso_context_t *osso_global;
 X509_STORE* root_store = NULL;
 
-/*
- * Send certificate name to get_privatekey by a global variable!
- */
-gchar *cert_name = NULL;
-
 /**
  * Definition of execute interface for Certman applet, used by any calling
  * application (primary user: Control Panel application).

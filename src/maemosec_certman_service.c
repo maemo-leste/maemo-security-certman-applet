@@ -51,8 +51,6 @@ osso_context_t *osso_g = NULL;
 /*
  * Send certificate name to get_privatekey by a global variable!
  */
-gchar *cert_name = NULL;
-
 gboolean _quit_clean(gpointer pointer);
 
 #define OSSO_CM_SERVICE "com.nokia.certman"
@@ -176,14 +174,14 @@ osso_rpc_cb(const gchar *interface,
 		if (1 < args->len) {
 			name = g_array_index(args, osso_rpc_t, 1);
 			if (DBUS_TYPE_STRING == name.type)
-				cert_name = name.value.s;
+				cert_name_for_get_privatekey = name.value.s;
 		}
 
 		rc = maemosec_certman_str_to_key_id(val.value.s, key_id);
 		if (0 == rc) {
 			pkey = certmanui_get_privatekey(GTK_WINDOW(top_aux), key_id, &password,
 											NULL, NULL);
-			cert_name = NULL;
+			cert_name_for_get_privatekey = "";
             g_main_loop_quit(mainloop);
 			if (NULL != pkey) {
 				retval->type = DBUS_TYPE_STRING;
@@ -195,7 +193,7 @@ osso_rpc_cb(const gchar *interface,
 				return(OSSO_ERROR);
 			}
 		} else {
-			cert_name = NULL;
+			cert_name_for_get_privatekey = "";
 			MAEMOSEC_ERROR("%s: invalid key id '%s'", val.value.s);
 			return(OSSO_ERROR);
 		}

@@ -166,6 +166,12 @@ extern "C" {
    @return The private key or NULL, if it couldn't be fetched or function 
    was called as non-blocking
 */
+	/*
+	 * Set this to point to the certificate name if you want it visible
+	 * in the password query.
+	 */
+	extern gchar* cert_name_for_get_privatekey;
+
     EVP_PKEY* certmanui_get_privatekey(gpointer window, maemosec_key_id cert_id,
                                        gchar** password,
                                        PrivateKeyResponseFunc callback,

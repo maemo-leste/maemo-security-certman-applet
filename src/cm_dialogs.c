@@ -291,14 +291,6 @@ ui_create_main_dialog(gpointer window)
                      G_CALLBACK(cert_list_row_activated),
                      cert_list_store);
 
-	/*
-	 * Is this what is needed to fix NB#122467: treeview is not direct child
-	 * of pannable area? Obviously not.
-	 */
-	MAEMOSEC_DEBUG(1, "%s: add cert_list to panarea", __func__);
-	gtk_container_add(GTK_CONTAINER(panarea), cert_list);
-	MAEMOSEC_DEBUG(1, "%s: added cert_list to panarea", __func__);
-
 	MAEMOSEC_DEBUG(1, "Populate user certificates");
 	pc.store = cert_list_store;
 	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_PRIVATE;
@@ -1417,8 +1409,13 @@ GtkWidget* enter_passwd_dialog = NULL;
 /* defined in importexport.c */
 extern gboolean close_store_on_exit;
 
-/* This is terrible! */
-extern gchar *cert_name;
+/* 
+ * A global parameter for supplying the certificate
+ * name for the get_privatekey dialog. A temporary
+ * solution to be replaced by a new function when 
+ * its status has been checked and the change sync'd.
+ */
+gchar *cert_name_for_get_privatekey = "";
 
 EVP_PKEY* 
 certmanui_get_privatekey(gpointer window, 
@@ -1446,7 +1443,8 @@ certmanui_get_privatekey(gpointer window,
     enter_passwd_dialog = create_password_dialog(window,
                                                  cert,
                                                  _("cert_ti_enter_password"),
-												 cert_name?cert_name:"",
+												 cert_name_for_get_privatekey?
+												 cert_name_for_get_privatekey:"",
                                                  _("cert_ia_password"),
                                                  dgettext("hildon-libs", "wdgt_bd_done"),
                                                  "",
