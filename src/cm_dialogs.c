@@ -284,8 +284,7 @@ ui_create_main_dialog(gpointer window)
 	MAEMOSEC_DEBUG(1, "Created certificate lists");
 
 	GtkWidget *panarea = hildon_pannable_area_new();
-	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
-										  GTK_WIDGET(cert_list));
+	gtk_container_add(GTK_CONTAINER(panarea), cert_list);
     g_signal_connect(G_OBJECT(cert_list), 
 					 "row-activated",
                      G_CALLBACK(cert_list_row_activated),
@@ -2232,8 +2231,7 @@ certmanui_install_certificates_dialog(gpointer window,
 	_create_certificate_list(&contents_list, &contents_store);
 
 	panarea = hildon_pannable_area_new();
-	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
-										  GTK_WIDGET(contents_list));
+	gtk_container_add(GTK_CONTAINER(panarea), contents_list);
 
     g_signal_connect(G_OBJECT(contents_list), 
 					 "row-activated",
@@ -2385,8 +2383,7 @@ ask_domains(gpointer window,
 		hildon_touch_selector_append_text(selector, _(tgt->symbolic_name));
 
 	panarea = hildon_pannable_area_new();
-	hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea),
-										   (GtkWidget*)(selector));
+	gtk_container_add(GTK_CONTAINER(panarea), (GtkWidget*)(selector));
 
 	gtk_widget_set_size_request(GTK_WIDGET(panarea), 0, 0);
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), panarea);
