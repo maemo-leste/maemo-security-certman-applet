@@ -29,7 +29,7 @@ maemo-security-certman-applet (0.0.8) unstable; urgency=low
   * Implemented install from unencrypted, simple PKCS#7 containers.
   * Allowed deletion of invalid certificates.
 
- -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Thu, 25 Jun 2009 15:05:31 +0300
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 26 Jun 2009 15:05:31 +0300
 
 maemo-security-certman-applet (0.0.7) unstable; urgency=low
   
