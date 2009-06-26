@@ -23,7 +23,9 @@ maemo-security-certman-applet (0.0.8) unstable; urgency=low
   * Show NID_pkcs9_emailAddress name component in certificate details
       Fixes: NB#122922
   * Use gtk_container_add in stead of hildon_pannable_area_add_with_viewport.
+      Fixes: NB#118373
       Fixes: NB#122467
+    Unfortunately the changes cause problem NB#111605 to reappear.
   * Implemented install from unencrypted, simple PKCS#7 containers.
   * Allowed deletion of invalid certificates.
 

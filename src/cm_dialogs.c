@@ -582,7 +582,6 @@ _is_row_header(GtkTreeModel *model,
 	gchar* title = NULL;
 	gchar* key_str = NULL;
 	gboolean result = FALSE;
-	int* flip_flop = (int*)data;
 
 	gtk_tree_model_get(model, iter, 
 					   MAIN_NAME_COL, &title, 
@@ -590,23 +589,43 @@ _is_row_header(GtkTreeModel *model,
 
 	if (NULL == key_str) {
 		if (NULL != title) {
-			MAEMOSEC_DEBUG(4, "%s: '%s' is row header, already set=%d", 
-						   __func__, title, *flip_flop);
 			if (header_text) {
-				if (0 == *flip_flop) {
-					*header_text = g_strdup(title);
-					*flip_flop = 1;
-				} else
-					*header_text = g_strdup("");
-			} else {
-				*flip_flop = 0;
+#if 0
+				/*
+				 * This logic does not work any more, as there
+				 * seems to be no deterministic order with which
+				 * the callback is called according to columns. 
+				 * So just always return the header and have
+				 * it duplicated.
+				 */
+				GtkTreePath* path = NULL;
+				gint* indices = NULL;
+				gint* last_row = (gint*)data;
+				path = gtk_tree_model_get_path(model, iter);
+				if (NULL != path) {
+					indices = gtk_tree_path_get_indices(path);
+					if (NULL != indices) {
+						int first_col = (*indices != *last_row);
+						MAEMOSEC_DEBUG(4, "%s: on row %d '%s' at %s", 
+									   __func__, 
+									   *indices, 
+									   title,
+									   first_col?"first col":"some other col"
+									   );
+						if (first_col) {
+							*header_text = g_strdup(title);
+							*last_row = *indices;
+						} else {
+							*header_text = g_strdup("");
+						}
+					}
+					gtk_tree_path_free(path);
+				}
+#endif
+				*header_text = g_strdup(title);
 			}
 			result = TRUE;
-		} else {
-			MAEMOSEC_DEBUG(4, "%s: Title not set?", __func__);
-		} 
-	} else {
-		MAEMOSEC_DEBUG(4, "%s: '%s' is not a row header", __func__, title?title:"???");
+		}
 	}
 	if (title)
 		g_free(title);
@@ -662,6 +681,7 @@ _create_certificate_list(GtkWidget** list,
 
     gtk_tree_view_column_set_widget(column, NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW(*list), column);
+	flip_flop = 0;
 	hildon_tree_view_set_row_header_func(GTK_TREE_VIEW(*list), 
 										 _is_row_header, &flip_flop, NULL);
 
@@ -1349,7 +1369,7 @@ static void _add_labels(GtkTable* table,
     label_label = gtk_label_new(label);
     value_label = gtk_label_new(NULL);
 
-    gtk_label_set_markup(GTK_LABEL(value_label), value);
+    gtk_label_set_text(GTK_LABEL(value_label), value);
     gtk_table_attach(table, label_label, 0, 1, *row, (*row)+1,
                      (GtkAttachOptions) (GTK_FILL),
                      (GtkAttachOptions) (GTK_FILL), 0, 0);
