@@ -1,4 +1,4 @@
-AC_INIT([maemo-security-certman-applet], 0.0.8)
+AC_INIT([maemo-security-certman-applet], 0.0.9)
 
 # Initialize automake
 AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)

@@ -67,6 +67,11 @@ enum {
 #define ISSUE_COL_WIDTH         170
 #define PURPOSE_COL_WIDTH       120
 
+/*
+ * User-defined response code
+ */
+#define GTK_RESPONSE_CHANGE_PASSWORD 1001
+
 
 /* Local interface */
 
@@ -812,6 +817,153 @@ create_scroller(GtkWidget* child)
     return scroller;
 }
 
+/*
+ * Ask for a new password
+ */
+struct new_password_entry_rec {
+	GtkWidget *entry1;
+	GtkWidget *entry2;
+	GtkWidget *button;
+};
+
+/*
+ * Enable "Done" button only if the same, non-empty text
+ * has been entered in both fields.
+ */
+static void
+_check_new_password(GtkEditable *editable,  gpointer user_data)
+{
+	struct new_password_entry_rec *check_args = 
+		(struct new_password_entry_rec*) user_data;
+	const gchar *new_pwd, *ref_pwd;
+
+	new_pwd = gtk_entry_get_text(GTK_ENTRY(check_args->entry1));
+	ref_pwd = gtk_entry_get_text(GTK_ENTRY(check_args->entry2));
+	MAEMOSEC_DEBUG(1, "%s: '%s' - '%s'", __func__, new_pwd, ref_pwd);
+	if (new_pwd && ref_pwd && strlen(new_pwd) && (0 == strcmp(new_pwd,ref_pwd)))
+		gtk_widget_set_sensitive(check_args->button, TRUE);
+	else
+		gtk_widget_set_sensitive(check_args->button, FALSE);
+}
+
+
+static gchar*
+get_new_password(gpointer window) 
+{
+    GtkWidget* new_password_dialog = NULL;
+    GtkWidget* new_password = NULL;
+    GtkWidget* ref_password = NULL;
+    GtkWidget* ok_button = NULL;
+    GdkGeometry hints;
+    GtkSizeGroup *group = GTK_SIZE_GROUP(gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL));
+	gint response;
+	gchar* result = NULL;
+	struct new_password_entry_rec check_args;
+
+	new_password_dialog = hildon_set_password_dialog_new(window, TRUE);
+	gtk_widget_show_all(new_password_dialog);
+	do {
+		response = gtk_dialog_run(GTK_DIALOG(new_password_dialog));
+		if (GTK_RESPONSE_OK == response) {
+			result = g_strdup(hildon_set_password_dialog_get_password
+							  ((HildonSetPasswordDialog*)new_password_dialog));
+			MAEMOSEC_DEBUG(1, "%s: changed password to '%s'", __func__, result);
+			break;
+		}
+	} while (GTK_RESPONSE_DELETE_EVENT != response);
+
+	gtk_widget_hide_all(new_password_dialog);
+	gtk_widget_destroy(new_password_dialog);
+	return(result);
+
+	/*
+	 * The rest of the code is dead, but implements much better
+	 * password changing logic that the default (and deprecated)
+	 * hilson_set_password_dialog. So let it be here the time being.
+	 */
+
+    /* Construct dialog */
+    new_password_dialog = gtk_dialog_new_with_buttons("Change password", /* TRANSLATE */
+												GTK_WINDOW(window),
+												GTK_DIALOG_MODAL
+												| GTK_DIALOG_DESTROY_WITH_PARENT
+												| GTK_DIALOG_NO_SEPARATOR,
+												NULL);
+
+	new_password = gtk_entry_new();
+    hildon_gtk_entry_set_input_mode (GTK_ENTRY (new_password), 
+									 HILDON_GTK_INPUT_MODE_FULL 
+									 | HILDON_GTK_INPUT_MODE_INVISIBLE);
+	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(new_password_dialog)->vbox), 
+					  hildon_caption_new(group, 
+										 "New password", /* TRANSLATE */
+										 new_password, 
+										 NULL, 
+										 HILDON_CAPTION_OPTIONAL));
+
+    ref_password = gtk_entry_new();
+    hildon_gtk_entry_set_input_mode (GTK_ENTRY (ref_password), 
+									 HILDON_GTK_INPUT_MODE_FULL 
+									 | HILDON_GTK_INPUT_MODE_INVISIBLE);
+	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(new_password_dialog)->vbox), 
+					  hildon_caption_new(group, 
+										 "Retype password",  /* TRANSLATE */
+										 ref_password, 
+										 NULL, 
+										 HILDON_CAPTION_OPTIONAL));
+
+    ok_button = gtk_dialog_add_button(GTK_DIALOG(new_password_dialog), 
+									  dgettext("hildon-libs", "wdgt_bd_done"),
+									  GTK_RESPONSE_OK);
+
+    /* Set window geometry */
+    hints.min_width  = PASSWD_MIN_WIDTH;
+    hints.min_height = PASSWD_MIN_HEIGHT;
+    hints.max_width  = PASSWD_MAX_WIDTH;
+    hints.max_height = PASSWD_MAX_HEIGHT;
+
+    gtk_window_set_geometry_hints(GTK_WINDOW(new_password_dialog),
+                                  new_password_dialog, &hints,
+                                  GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
+
+	gtk_widget_show_all(new_password_dialog);
+
+	/*
+	 * Start with "Done" button disabled and enable it 
+	 * when input is OK.
+	 */
+	check_args.entry1 = new_password;
+	check_args.entry2 = ref_password;
+	check_args.button = ok_button;
+
+	g_signal_connect(G_OBJECT(new_password),
+					 "changed",
+					 G_CALLBACK(_check_new_password),
+					 &check_args);
+
+	g_signal_connect(G_OBJECT(ref_password),
+					 "changed",
+					 G_CALLBACK(_check_new_password),
+					 &check_args);
+
+	gtk_widget_set_sensitive(ok_button, FALSE);
+
+	do {
+		response = gtk_dialog_run(GTK_DIALOG(new_password_dialog));
+		if (GTK_RESPONSE_OK == response) {
+			result = g_strdup(gtk_entry_get_text(GTK_ENTRY(new_password)));
+			break;
+		}
+	} while (GTK_RESPONSE_DELETE_EVENT != response);
+					   
+	gtk_widget_hide_all(new_password_dialog);
+	/* TODO: Should entries be destroyed as well? */
+	// gtk_widget_destroy(new_password);
+	// gtk_widget_destroy(ref_password);
+	gtk_widget_destroy(new_password_dialog);
+	return(result);
+}
+
 
 /* Certificate details */
 gboolean
@@ -835,6 +987,7 @@ _certificate_details(gpointer window,
     GtkWidget* cert_notebook = NULL;
     GtkWidget* cert_main_page = NULL;
 	GtkWidget *bn_button = NULL;
+	GtkWidget *change_password_button = NULL;
 
     GdkGeometry hints;
     GtkWidget* infobox = NULL;
@@ -894,7 +1047,6 @@ _certificate_details(gpointer window,
     if (infobox == NULL)
     {
 		MAEMOSEC_DEBUG(1, "Failed to create infobox");
-        hildon_banner_show_information (window, NULL, _("cert_error_open"));
 		gtk_widget_destroy(cert_dialog);
         return(FALSE);
     }
@@ -944,6 +1096,24 @@ _certificate_details(gpointer window,
 		bn_button = gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
 										  btn_label,
 										  GTK_RESPONSE_APPLY);
+
+	if (has_private_key(cert)) {
+		/*
+		 * Some acrobacy needed to avoid localization changes
+		 */
+		char password_btn_title[32];
+		char *colon;
+		strncpy(password_btn_title, _("cert_ia_password"), sizeof(password_btn_title));
+		password_btn_title[sizeof(password_btn_title) - 1] = '\0';
+		colon = strchr(password_btn_title, ':');
+		if (NULL != colon)
+			*colon = '\0'; 
+		change_password_button = 
+			gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
+								  password_btn_title,
+								  // _("cert_bd_cd_change_password"),
+								  GTK_RESPONSE_CHANGE_PASSWORD);
+	}
 		
     /* Show and run the dialog */
 	MAEMOSEC_DEBUG(1, "Showing details");
@@ -962,7 +1132,57 @@ _certificate_details(gpointer window,
         if (GTK_RESPONSE_APPLY == ret) {
 			result = TRUE;
 			break;
-        }
+
+        } else if (GTK_RESPONSE_CHANGE_PASSWORD == ret) {
+			EVP_PKEY* pkey;
+			maemosec_key_id key_id;
+			gchar* old_password = NULL;
+			gchar* new_password = NULL;
+			int rc;
+
+			rc = maemosec_certman_get_key_id(cert, key_id);
+			if (0 != rc) {
+				MAEMOSEC_ERROR("%s: cannot get key id (%d)", __func__, rc);
+				continue;
+			}
+
+			/*
+			 * First get the private key with the old password
+			 */
+			pkey = certmanui_get_privatekey(window, key_id, &old_password, NULL, NULL);
+
+			/*
+			 * We don't need this any more
+			 */
+			if (old_password)
+				g_free(old_password);
+			if (NULL == pkey) {
+				MAEMOSEC_ERROR("%s: wrong password obviously", __func__);
+				continue;
+			}
+
+			/*
+			 * Then ask for the new password
+			 */
+			new_password = get_new_password(window);
+			if (NULL == new_password) {
+				MAEMOSEC_ERROR("%s: cancelled obviously", __func__);
+				EVP_PKEY_free(pkey);
+				continue;
+			}
+
+			/*
+			 * Store the key with the new password
+			 */
+			rc = maemosec_certman_store_key(key_id, pkey, new_password);
+			if (0 == rc) {
+				/* TRANSLATE */
+				// hildon_banner_show_information (window, NULL, "password changed");
+			} else {
+				MAEMOSEC_ERROR("%s: cannot store private key (%d)", __func__, rc);
+				// hildon_banner_show_information (window, NULL, "password changing failed");
+			}
+		}
     } while (GTK_RESPONSE_DELETE_EVENT != ret);
 
     gtk_widget_hide_all(cert_dialog);
@@ -1356,11 +1576,12 @@ _create_infobox(gpointer window, X509* cert, gchar** btn_label)
 }
 
 
-static void _add_labels(GtkTable* table, 
-						gint* row,
-                        const gchar* label, 
-						const gchar* value, 
-						gboolean wrap)
+static void 
+_add_labels(GtkTable* table, 
+			gint* row,
+			const gchar* label, 
+			const gchar* value, 
+			gboolean wrap)
 {
     GtkWidget* label_label;
     GtkWidget* value_label;
@@ -1393,7 +1614,7 @@ static void _add_labels(GtkTable* table,
    @param user_data     The OK-button.
 */
 static void _passwd_text_changed(GtkEditable *editable,
-                                 gpointer user_data);
+					 gpointer user_data);
 
 /**
    Handler for the timeout. Decreases the left time and enables the
@@ -1423,7 +1644,7 @@ gint time_left = -1; /* time_left < 0 => terminate timeout */
 gint delays[] = {0, 1, 30, 300, -1};
 gint current_delay = 0;
 
-GtkWidget* enter_passwd_dialog = NULL;
+GtkWidget* enter_password_dialog = NULL;
 
 /* defined in importexport.c */
 extern gboolean close_store_on_exit;
@@ -1459,19 +1680,19 @@ certmanui_get_privatekey(gpointer window,
     params.user_data = user_data;
 
     /* Create password dialog */
-    enter_passwd_dialog = create_password_dialog(window,
-                                                 cert,
-                                                 _("cert_ti_enter_password"),
-												 cert_name_for_get_privatekey?
-												 cert_name_for_get_privatekey:"",
+    enter_password_dialog = create_password_dialog(window,
+												   cert,
+												   _("cert_ti_enter_password"),
+												   cert_name_for_get_privatekey?
+												   cert_name_for_get_privatekey:"",
                                                  _("cert_ia_password"),
-                                                 dgettext("hildon-libs", "wdgt_bd_done"),
-                                                 "",
-                                                 &params.passwd_entry,
-                                                 FALSE, 1);
-    gtk_widget_show_all(enter_passwd_dialog);
+												   dgettext("hildon-libs", "wdgt_bd_done"),
+												   "",
+												   &params.passwd_entry,
+												   FALSE, 0);
+    gtk_widget_show_all(enter_password_dialog);
 
-    g_signal_connect(G_OBJECT(enter_passwd_dialog), "response",
+    g_signal_connect(G_OBJECT(enter_password_dialog), "response",
                      G_CALLBACK(_password_dialog_response), &params);
 
     /* If there is no callback, then block, until we got definite answer */
@@ -1481,7 +1702,7 @@ certmanui_get_privatekey(gpointer window,
         while(response_id == GTK_RESPONSE_OK &&
               params.got_key == NULL)
         {
-            response_id = gtk_dialog_run(GTK_DIALOG(enter_passwd_dialog));
+            response_id = gtk_dialog_run(GTK_DIALOG(enter_password_dialog));
         }
 
         /* Save password, if user is interested in it */
@@ -1492,11 +1713,11 @@ certmanui_get_privatekey(gpointer window,
                                      GTK_ENTRY(params.passwd_entry)));
         }
 
-        gtk_widget_destroy(enter_passwd_dialog);
-        enter_passwd_dialog = NULL;
+        gtk_widget_destroy(enter_password_dialog);
+        enter_password_dialog = NULL;
     }
 
-    return params.got_key;
+    return(params.got_key);
 }
 
 
@@ -1506,9 +1727,9 @@ certmanui_get_privatekey(gpointer window,
 void 
 certmanui_cancel_privatekey(void)
 {
-    if (enter_passwd_dialog != NULL)
+    if (enter_password_dialog != NULL)
     {
-        gtk_dialog_response(GTK_DIALOG(enter_passwd_dialog),
+        gtk_dialog_response(GTK_DIALOG(enter_password_dialog),
                             GTK_RESPONSE_CANCEL);
     }
 }
@@ -1561,7 +1782,7 @@ _password_dialog_response(GtkDialog* dialog,
     if (params->callback != NULL)
     {
         gtk_widget_destroy(GTK_WIDGET(dialog));
-        enter_passwd_dialog = NULL;
+        enter_password_dialog = NULL;
         params->callback(params->cert_id,
                          params->got_key,
                          passwd,
@@ -1585,7 +1806,7 @@ create_password_dialog(gpointer window,
 					   gboolean install_timeout,
 					   guint min_chars)
 {
-    GtkWidget* passwd_dialog = NULL;
+    GtkWidget* password_dialog = NULL;
     gchar* name = NULL;
     GtkWidget* entry_text = NULL;
     GtkWidget* ok_button = NULL;
@@ -1598,7 +1819,7 @@ create_password_dialog(gpointer window,
     static GtkWidget* params[2];
 
     /* Construct dialog */
-    passwd_dialog = gtk_dialog_new_with_buttons(
+    password_dialog = gtk_dialog_new_with_buttons(
         title,
         GTK_WINDOW(window),
         GTK_DIALOG_MODAL
@@ -1607,7 +1828,7 @@ create_password_dialog(gpointer window,
         NULL);
 
     /* Add buttons to dialog */
-    ok_button = gtk_dialog_add_button(GTK_DIALOG(passwd_dialog),
+    ok_button = gtk_dialog_add_button(GTK_DIALOG(password_dialog),
                                       ok_label,
                                       GTK_RESPONSE_OK);
 
@@ -1615,7 +1836,7 @@ create_password_dialog(gpointer window,
 	gtk_label_set_line_wrap(GTK_LABEL(entry_text), TRUE);
 	gtk_misc_set_alignment(GTK_MISC(entry_text), 0.0, 0.5);
 	gtk_container_add(
-        GTK_CONTAINER(GTK_DIALOG(passwd_dialog)->vbox),
+        GTK_CONTAINER(GTK_DIALOG(password_dialog)->vbox),
         entry_text);
 
     /* Set window geometry */
@@ -1624,8 +1845,8 @@ create_password_dialog(gpointer window,
     hints.max_width  = PASSWD_MAX_WIDTH;
     hints.max_height = PASSWD_MAX_HEIGHT;
 
-    gtk_window_set_geometry_hints(GTK_WINDOW(passwd_dialog),
-                                  passwd_dialog, &hints,
+    gtk_window_set_geometry_hints(GTK_WINDOW(password_dialog),
+                                  password_dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
     /* If certificate != NULL, then provide "issued to" information */
@@ -1641,7 +1862,7 @@ create_password_dialog(gpointer window,
         gtk_misc_set_alignment(GTK_MISC(name_label), 0.0, 0.5);
 
         gtk_container_add(
-            GTK_CONTAINER(GTK_DIALOG(passwd_dialog)->vbox),
+            GTK_CONTAINER(GTK_DIALOG(password_dialog)->vbox),
             name_label);
     }
 
@@ -1657,7 +1878,7 @@ create_password_dialog(gpointer window,
                                         NULL, HILDON_CAPTION_OPTIONAL);
 
     gtk_container_add(
-        GTK_CONTAINER(GTK_DIALOG(passwd_dialog)->vbox),
+        GTK_CONTAINER(GTK_DIALOG(password_dialog)->vbox),
         passwd_caption);
 
     /* Connect signal handler */
@@ -1688,7 +1909,7 @@ create_password_dialog(gpointer window,
     /* Disable the OK-button */
     if (min_chars > 0) gtk_widget_set_sensitive(ok_button, FALSE);
 
-    return passwd_dialog;
+    return(password_dialog);
 }
 
 
@@ -2157,13 +2378,13 @@ ask_password(gpointer window,
 			 const char* info)
 {
 	gint response = 0;
-	GtkWidget* passwd_dialog = NULL;
+	GtkWidget* password_dialog = NULL;
 	GtkWidget* passwd_entry  = NULL;
 	gchar *result, *temp = NULL;
 	int retries = 0;
 
 	MAEMOSEC_DEBUG(1, "Ask password");
-	passwd_dialog = create_password_dialog(
+	password_dialog = create_password_dialog(
 		window,
 		NULL,
 		_("cert_ti_enter_file_password"),
@@ -2175,9 +2396,9 @@ ask_password(gpointer window,
 		FALSE, 
 		0);
 
-	gtk_widget_show_all(passwd_dialog);
+	gtk_widget_show_all(password_dialog);
 	do {
-		response = gtk_dialog_run(GTK_DIALOG(passwd_dialog));
+		response = gtk_dialog_run(GTK_DIALOG(password_dialog));
 		if (response == GTK_RESPONSE_OK) {
 			result = g_strdup(gtk_entry_get_text(GTK_ENTRY(passwd_entry)));
 			MAEMOSEC_DEBUG(1, "entered password '%s'", result);
@@ -2187,7 +2408,7 @@ ask_password(gpointer window,
 			} else {
 				MAEMOSEC_DEBUG(1, "password is not OK");
 				gtk_entry_set_text(GTK_ENTRY(passwd_entry), "");
-				hildon_banner_show_information(passwd_dialog, 
+				hildon_banner_show_information(password_dialog, 
 											   NULL, 
 											   _("cer_ib_incorrect"));
 				gtk_widget_grab_focus(passwd_entry);
@@ -2201,8 +2422,8 @@ ask_password(gpointer window,
 		MAEMOSEC_ERROR("Failed to enter correct password");
 	}
 
-	gtk_widget_hide_all(passwd_dialog);
-	gtk_widget_destroy(passwd_dialog);
+	gtk_widget_hide_all(password_dialog);
+	gtk_widget_destroy(password_dialog);
 
 	if (temp)
 		g_free(temp);
