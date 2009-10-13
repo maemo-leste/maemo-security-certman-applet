@@ -3,8 +3,6 @@
    @file osso-applet-certman.h
 
    Certificate manager API for external usage.
-   <p>
-   Copyright (c) 2005 Nokia. All rights reserved.
 
    @author  Karoliina T. Salminen <karoliina.t.salminen@nokia.com>
 */
