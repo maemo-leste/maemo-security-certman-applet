@@ -1,5 +1,6 @@
 #!/bin/sh -e
-
+# TODO: Lintian says that gconf-schemas or update-gconf-defaults
+# should be used in stead of gconftool-2 should 
 schemadir=/etc/gconf/schemas
 schema_DATA=maemosec_certman.schemas
 GCONFTOOL=gconftool-2

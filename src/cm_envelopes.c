@@ -329,7 +329,7 @@ extract_envelope(gpointer window,
     if (NULL == shortname) {
         shortname = strrchr(fileuri, '/');
         if (NULL == shortname)
-            shortname = fileuri;
+            shortname = (gchar*)fileuri;
         else
             shortname++;
     }
@@ -358,7 +358,9 @@ extract_envelope(gpointer window,
 		if (test_pkcs12_password(idata, ""))
 			*password = g_strdup("");
 		else
-			*password = ask_password(window, FALSE, test_pkcs12_password, idata, shortname);
+			*password = (gchar*)ask_password(window, FALSE, 
+                                             test_pkcs12_password, 
+                                             idata, shortname);
 
 		rc = PKCS12_parse((PKCS12*)idata, *password, pkey, &cert, &cas);
 		MAEMOSEC_DEBUG(1, "parse PKCS12 returned %d", rc);

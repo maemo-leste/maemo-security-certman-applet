@@ -49,6 +49,17 @@
 
 extern long timezone;
 
+/*
+ * Certificates can be imported from files of these types
+ */
+static gchar *cert_mimetypes[] = {
+    "application/x-osso-applet-certman",
+    "application/x-x509-ca-cert",
+    "application/x-pkcs12",
+    "application/pkcs7-mime",
+    "application/pkcs7-signature",
+    NULL};
+
 /* Certificate list colums */
 enum {
     MAIN_NAME_COL = 0,
@@ -272,11 +283,6 @@ GtkWidget*
 ui_create_main_dialog(gpointer window) 
 {
 	GtkWidget* main_dialog = NULL;
-    GtkTreeIter iter;
-	const struct pkcs12_target *tgt;
-	char domain_name[256];
-	struct populate_context pc;
-	int rc;
 
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 
@@ -1912,15 +1918,7 @@ cert_list_row_activated(GtkTreeView* tree,
         if (0 == strcmp(IMPORT_NEW_DOMAIN, domain)) {
             ComappOpenSave opensave_data;
             comapp_fc_result select_result;
-
-            GtkWidget *dialog;
             gchar *filename = NULL;
-            gchar *mimetypes[] = {"application/x-osso-applet-certman",
-                                  "application/x-x509-ca-cert",
-                                  "application/x-pkcs12",
-                                  "application/pkcs7-mime",
-                                  "application/pkcs7-signature",
-                                  NULL};
 
             memset(&opensave_data,0,sizeof(ComappOpenSave));
     
@@ -1928,7 +1926,7 @@ cert_list_row_activated(GtkTreeView* tree,
             opensave_data.parent = gtk_widget_get_ancestor(GTK_WIDGET(tree), GTK_TYPE_WINDOW);
             opensave_data.open_window_title = _("cert_ti_main_notebook_import");
             opensave_data.osso = osso_global;
-            opensave_data.mime_types = mimetypes; 
+            opensave_data.mime_types = cert_mimetypes; 
 
             comapp_opensave_new(&opensave_data);
             select_result = comapp_opensave_run(&opensave_data);
