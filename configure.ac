@@ -1,14 +1,14 @@
-AC_INIT([maemo-security-certman-applet], 0.0.9)
-
-# Initialize automake
-AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
-AC_CONFIG_HEADERS(config.h)
-
-LIBRARY_VERSION=0
-AC_SUBST(LIBRARY_VERSION)
+AC_INIT([maemo-security-certman-applet], [0.1.0])
 
 # Tests that source dir exists
 AC_CONFIG_SRCDIR([src/applet_main.c])
+
+# Initialize automake
+AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
+AC_CONFIG_HEADERS([config.h])
+
+LIBRARY_VERSION=0
+AC_SUBST(LIBRARY_VERSION)
 
 # For automake: generate rules to reproduce config.h, if needed
 
@@ -34,6 +34,7 @@ AC_HEADER_STDBOOL
 #CFLAGS="$CFLAGS -Wall -Wno-format-y2k -ansi -Wmissing-prototypes -Wmissing-declarations -Werror -std=c99 -DDEBUG"
 CFLAGS="$CFLAGS -Wall -Wno-format-y2k -ansi -Wmissing-prototypes \
 -Wmissing-declarations -std=c99 -DDEBUG -D_REENTRANT"
+
 AC_SUBST(CFLAGS)
                                                                                 
 PKG_CHECK_MODULES(GTK, gtk+-2.0 >= 2.4.0)
@@ -54,7 +55,12 @@ PKG_CHECK_MODULES(OSSO, libosso >= 1.0.0)
 AC_SUBST(OSSO_LIBS)
 AC_SUBST(OSSO_CFLAGS)
 
-PKG_CHECK_MODULES(HILDON, hildon-1 >= 1.0.0 hildon-control-panel >= 0.10.0 hildon-fm-2)
+PKG_CHECK_MODULES(HILDON, 
+hildon-1 >= 1.0.0 
+hildon-control-panel >= 0.10.0 
+hildon-fm-2 >= 0.8.2
+comapp
+)
 AC_SUBST(HILDON_LIBS)
 AC_SUBST(HILDON_CFLAGS)
                                                                                 

@@ -1,3 +1,19 @@
+maemo-security-certman-applet (0.1.0) unstable; urgency=low
+
+  * Change layout to use only one column, with two lines at each item
+    and usage code at the second line.
+      Fixes: NB#133458
+      Fixes: NB#122480
+  * Put the password button in the proper place 
+      Fixes: NB#143537
+  * Fixed the interaction when delete is cancelled
+      Fixes: NB#143536
+  * Use gnome_vfs_uri_extract_shortname to show the name of a file 
+    to be installed
+      Fixes: NB#144040
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Tue, 18 Aug 2009 19:10:00 +0300
+
 maemo-security-certman-applet (0.0.9) unstable; urgency=low
   
   * Implemented dialog for changing the password of a private key.

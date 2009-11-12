@@ -14,8 +14,13 @@ else
 	# strict-aliasing causes problems in cm_service.c
 	CFLAGS += -O2 -fno-strict-aliasing
 endif
+
 ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
 	INSTALL_PROGRAM += -s
+endif
+
+ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
+	CFLAGS += -DMAEMOSEC_DEBUG_ENABLED
 endif
 
 configure: configure-stamp

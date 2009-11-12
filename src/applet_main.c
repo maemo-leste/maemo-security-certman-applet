@@ -73,7 +73,7 @@ execute(osso_context_t * osso,
 {
     gint ret = -1, tret = 0;
 
-    MAEMOSEC_DEBUG(1, "Enter %s", __func__);
+    MAEMOSEC_DEBUG(1, "Enter %s (built %s %s)", __func__, __DATE__, __TIME__);
 
     // setlocale(LC_ALL, "");
     bindtextdomain(LANGDOMAIN, LOCALEDIR);
@@ -110,7 +110,6 @@ execute(osso_context_t * osso,
            ret != GTK_RESPONSE_CANCEL)
     {
         ret = gtk_dialog_run(GTK_DIALOG(main_dialog));
-
     }
 
     /* Quit */

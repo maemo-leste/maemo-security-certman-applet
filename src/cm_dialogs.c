@@ -35,10 +35,7 @@
 
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
-
-// #include <gtk/gtkenums.h>
-// #include <hildon/hildon-gtk.h>
-// #include <hildon/hildon-touch-selector.h>
+#include <libcomapp/comapp_opensave.h>
 
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
@@ -50,10 +47,11 @@
 #include "osso-applet-certman.h"
 #include "cm_envelopes.h"
 
+extern long timezone;
+
 /* Certificate list colums */
 enum {
     MAIN_NAME_COL = 0,
-    MAIN_PURPOSE_COL,
     MAIN_ID_COL,
     MAIN_DOMAIN_COL,
     MAIN_DOM_TYPE_COL,
@@ -89,6 +87,8 @@ enum {
 #define ISSUE_COL_WIDTH         170
 #define PURPOSE_COL_WIDTH       120
 
+#define MAX_TITLE_NAME_LEN      72
+
 /*
  * User-defined response code
  */
@@ -97,87 +97,103 @@ enum {
 
 /* Local interface */
 
+struct cert_info {
+	struct cert_info* left;
+	struct cert_info* right;
+	gchar* nickname;
+    gchar* usage;
+	gchar* sortname;
+	gchar* key_str;
+	gchar* domain_name;
+    gboolean is_valid;
+};
+
+struct sortname_info {
+	char* buf;
+	size_t bufmaxlen;
+};
+
+struct populate_context {
+	int domain_flags;
+	const char* domain_name;
+	GtkListStore *store;
+	GtkTreeIter* iter;
+    struct cert_info* search_tree;
+};
+
+static int
+_split_string(gchar* string, gchar separator, GList** to_list);
+static int
+_list_difference(GList* in_this, GList* but_not_in_this, GList** copy_here);
+static void
+_join(GList* the_list, gchar* with_separator, gchar** to_string);
+
 static void 
 _create_certificate_list(GtkWidget** list,
 						 GtkListStore** list_store);
 
-struct populate_context {
-	int domain_flags;
-	gchar *title;
-	GtkListStore *store;
-};
-
 static int 
 _populate_certificates(int pos,
-					   void* from_name,
+                       void* domain_name,
 					   void* ctx);
+static void
+_populate_all_certificates(GtkListStore* cert_list_store);
+
+static void
+_copy_search_tree(struct cert_info* from_tree, 
+                  struct populate_context *to_ctx);
+
+static void
+_release_search_tree(struct cert_info *node);
 
 static void
 _add_row_header(GtkListStore *list_store,
 				const gchar* header_text);
 
-static void _expired_dialog_response(GtkDialog* dialog,
-                                     gint response_id,
-                                     gpointer data);
+static void 
+_expired_dialog_response(GtkDialog* dialog,
+                         gint response_id,
+                         gpointer data);
 
-static void _infonote_dialog_response(GtkDialog* dialog,
-                                      gint response_id,
-                                      gpointer data);
+static void 
+_infonote_dialog_response(GtkDialog* dialog,
+                          gint response_id,
+                          gpointer data);
 static void 
 cert_list_row_activated(GtkTreeView* tree,
 						GtkTreePath* path,
 						GtkTreeViewColumn* col,
 						gpointer user_data);
 
-typedef enum {
-    FALSE_CALLED, CANCEL_CALLED, OK_CALLED
-} CbCalledResult;
+static int
+X509_check_cert_time(X509* cert);
 
+static gboolean
+ask_domains(gpointer window, 
+			GtkWidget **dialog,
+			GList** domains);
+
+static gboolean 
+_certificate_details(gpointer window,
+                     int domain_flags,
+                     X509* cert);
+
+static GtkWidget* 
+_create_infobox(gpointer window, 
+                X509* cert, 
+                gchar** btn_label);
+
+static void _add_labels(GtkTable* table, 
+                        gint* row,
+                        const gchar* label, 
+                        const gchar* value, 
+                        gboolean wrap);
+
+/** Generic callback parameter */
 typedef struct {
     CertificateExpiredResponseFunc callback;
     gpointer user_data;
 } CallbackParameter;
-
-/** Callback parameter for password query dialog response */
-typedef struct {
-    EVP_PKEY* got_key;
-    maemosec_key_id cert_id;
-    PrivateKeyResponseFunc callback;
-    GtkWidget* passwd_entry;
-    gpointer user_data;
-} PwdCallbackParameter;
-
-
-typedef struct {
-    gpointer window;
-    gchar* passwd; /* must be freed */
-    X509* cert;
-    CbCalledResult callback_called;
-} PasswordCallbackParameter;
-
-/** Callback parameter for password query dialog response */
-typedef struct {
-    EVP_PKEY* got_key;
-    maemosec_key_id cert_id;
-    PrivateKeyResponseFunc callback;
-    GtkWidget* passwd_entry;
-    gpointer user_data;
-} PwdQCallbackParameter;
-
-
-typedef struct {
-    gpointer window;
-    FileFormat format;
-    const gchar* fileuri;
-    maemosec_key_id cert_id;
-    maemosec_key_id key_id;
-    GSList *imported_certs;
-    X509 * last_error_cert;
-    gboolean error_occured;
-    gboolean cancel_pressed;
-} ConfirmCallbackParameter;
-
-
 
 /* Implementation */
 /*
@@ -188,7 +204,6 @@ GtkWidget* cert_list = NULL;
 GtkListStore* cert_list_store = NULL;
 osso_context_t *osso_global;
 GtkWindow* g_window = NULL;
-static int flip_flop = 0;
 GdkGeometry hints;
 
 /*
@@ -204,6 +219,7 @@ struct pkcs12_target {
 
 #define USER_DOMAIN_FMT "%s-user"
 #define CA_DOMAIN_FMT   "%s-ca"
+#define IMPORT_NEW_DOMAIN "##import-new"
 
 const struct pkcs12_target pkcs12_targets [] = {
 	{
@@ -234,18 +250,6 @@ const struct pkcs12_target pkcs12_targets [] = {
 	}
 };
 
-static GtkWidget* 
-create_password_dialog(gpointer window,
-					   X509* cert,
-					   const gchar* title,
-					   const gchar* greeting,
-					   const gchar* label,
-					   const gchar* ok_label,
-					   const gchar* cancel_label,
-					   GtkWidget** passwd_entry,
-					   gboolean install_timeout,
-					   guint min_chars);
-
 gboolean 
 certmanui_init(osso_context_t *osso_ext) 
 {
@@ -268,6 +272,7 @@ GtkWidget*
 ui_create_main_dialog(gpointer window) 
 {
 	GtkWidget* main_dialog = NULL;
+    GtkTreeIter iter;
 	const struct pkcs12_target *tgt;
 	char domain_name[256];
 	struct populate_context pc;
@@ -317,27 +322,7 @@ ui_create_main_dialog(gpointer window)
                      G_CALLBACK(cert_list_row_activated),
                      cert_list_store);
 
-	MAEMOSEC_DEBUG(1, "Populate user certificates");
-	pc.store = cert_list_store;
-	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_PRIVATE;
-	pc.title = "cert_ti_main_notebook_user";
-	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) {
-		snprintf(domain_name, sizeof(domain_name), USER_DOMAIN_FMT, tgt->domain_name);
-		_populate_certificates(0, domain_name, &pc);
-	}
-
-	MAEMOSEC_DEBUG(1, "Populate user modifiable CA certificates");
-	pc.title = "cert_ti_main_notebook_authorities";
-	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) {
-		snprintf(domain_name, sizeof(domain_name), CA_DOMAIN_FMT, tgt->domain_name);
-		_populate_certificates(0, domain_name, &pc);
-	}
-
-	MAEMOSEC_DEBUG(1, "Populate root CA certificates");
-	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
-	rc = maemosec_certman_iterate_domains(MAEMOSEC_CERTMAN_DOMAIN_SHARED,
-										  _populate_certificates,
-										  &pc);
+    _populate_all_certificates(cert_list_store);
 
 	MAEMOSEC_DEBUG(1, "Add pan area");
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(main_dialog)->vbox), panarea);
@@ -348,26 +333,84 @@ ui_create_main_dialog(gpointer window)
     return(main_dialog);
 }
 
-struct cert_info {
-	struct cert_info* left;
-	struct cert_info* right;
-	gchar* nickname;
-	gchar* sortname;
-	gchar* key_str;
-};
 
-struct cert_display_info {
-	const char* domain_name;
-	int domain_type;
-	struct cert_info* search_tree;
-	GtkListStore* store;
-	GtkTreeIter* iter;
-};
+static void
+_populate_all_certificates(GtkListStore* cert_list_store)
+{
+    GtkTreeIter iter;
+	const struct pkcs12_target *tgt;
+	char domain_name[256];
+	struct populate_context pc;
+	int rc;
 
-struct sortname_info {
-	char* buf;
-	size_t bufmaxlen;
-};
+
+    MAEMOSEC_DEBUG(1, "%s: enter", __func__);
+
+	MAEMOSEC_DEBUG(1, "%s: populate user certificates", __func__);
+
+	pc.store = cert_list_store;
+    pc.iter = &iter;
+	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_PRIVATE;
+    pc.domain_name = NULL;
+    pc.search_tree = NULL;
+
+	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) {
+		snprintf(domain_name, sizeof(domain_name), USER_DOMAIN_FMT, tgt->domain_name);
+		_populate_certificates(0, domain_name, &pc);
+	}
+
+	if (NULL != pc.search_tree) {
+		/*
+		 * Add header only if there are some user certificates installed
+		 */
+        _add_row_header(cert_list_store, _("cert_ti_main_notebook_user"));
+		_copy_search_tree(pc.search_tree, &pc);
+		_release_search_tree(pc.search_tree);
+        pc.search_tree = NULL;
+	}
+
+	MAEMOSEC_DEBUG(1, "Populate user modifiable CA certificates");
+
+    /*
+     * Let's assume that there always is some CA certificates
+     */
+    _add_row_header(cert_list_store, _("cert_ti_main_notebook_authorities"));
+	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) {
+		snprintf(domain_name, sizeof(domain_name), CA_DOMAIN_FMT, tgt->domain_name);
+		_populate_certificates(0, domain_name, &pc);
+	}
+
+	if (NULL != pc.search_tree) {
+		_copy_search_tree(pc.search_tree, &pc);
+		_release_search_tree(pc.search_tree);
+        pc.search_tree = NULL;
+	}
+
+	MAEMOSEC_DEBUG(1, "Populate root CA certificates");
+	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
+
+	rc = maemosec_certman_iterate_domains(MAEMOSEC_CERTMAN_DOMAIN_SHARED,
+										  _populate_certificates,
+										  &pc);
+
+	if (NULL != pc.search_tree) {
+		_copy_search_tree(pc.search_tree, &pc);
+		_release_search_tree(pc.search_tree);
+	}
+
+    /*
+     * Add an item to import a new certificate
+     */
+    gtk_list_store_append(cert_list_store, &iter);
+    gtk_list_store_set(cert_list_store, &iter,
+                       MAIN_NAME_COL, _("cert_ti_main_notebook_import"),
+                       MAIN_ID_COL, IMPORT_NEW_DOMAIN,
+                       MAIN_DOMAIN_COL, IMPORT_NEW_DOMAIN,
+                       -1);
+
+    MAEMOSEC_DEBUG(1, "%s: exit", __func__);
+}
+
 
 static void
 sortname_add_name_component(unsigned char* comp, void* ctx)
@@ -385,10 +428,23 @@ sortname_add_name_component(unsigned char* comp, void* ctx)
 	}
 }
 
+/*
+ * Sort according to a name built like this
+ */
 const int sortname_nids [] = {
 	NID_organizationName,
 	NID_organizationalUnitName,
 	NID_commonName
+};
+
+/*
+ * Show these in the details view
+ */
+static const int fullname_components [] = {
+	NID_pkcs9_emailAddress, 
+	NID_commonName, 
+	NID_organizationalUnitName, 
+	NID_organizationName
 };
 
 static void
@@ -425,11 +481,104 @@ pick_name_components_by_NIDS(X509_NAME* of_name,
 	}
 }
 
+/*
+ * A generic function to pick name components
+ */
+#define STR_ARR_END_MARK (gchar*)-1
+
+static void
+add_to_str_arr(unsigned char* namepart, void* data)
+{
+    gchar** str_arr = (gchar**) data;
+    int i;
+    for (i = 0; NULL != str_arr[i] && STR_ARR_END_MARK != str_arr[i]; i++);
+    if (STR_ARR_END_MARK != str_arr[i])
+        str_arr[i] = g_strdup((char*)namepart);
+}
+
+
+static gchar* 
+get_purpose_name(const char* for_domain_name)
+{
+	int i;
+
+	for (i = 0; NULL != pkcs12_targets[i].symbolic_name; i++) {
+		if (strlen(for_domain_name) >= strlen(pkcs12_targets[i].domain_name)
+			&& 0 == memcmp(pkcs12_targets[i].domain_name, 
+						   for_domain_name,
+						   strlen(pkcs12_targets[i].domain_name)))
+	    {
+			return(_(pkcs12_targets[i].symbolic_name));
+		}
+	}
+	return("");
+}
+
+static gchar*
+_cert_item_label(gboolean is_valid, gchar* nickname, gchar* usages)
+{
+    gchar *res;
+
+    if (is_valid) {
+        res = g_strdup_printf("<markup><b>%s</b>\n<small>%s %s</small></markup>", 
+                              nickname,
+                              _("cert_ti_main_notebook_validfor"),
+                              usages);
+    } else {
+        gchar *emesg = g_strdup(_("cert_nc_expired"));
+        gchar *c = strchr(emesg, '\n');
+        if (c)
+            *c = '\0';
+        res = g_strdup_printf("<markup><b>%s</b>\n<small><span color=\"red\">"
+                              "%s</span></small></markup>", 
+                              nickname,
+                              emesg);
+        g_free(emesg);
+    }
+    return res;
+}
+
+
+static void
+_copy_search_tree(struct cert_info* from_tree, struct populate_context *to_ctx)
+{
+	if (from_tree->left)
+		_copy_search_tree(from_tree->left, to_ctx);
+
+	MAEMOSEC_DEBUG(1, "%s", from_tree->nickname);
+	gtk_list_store_append(to_ctx->store, to_ctx->iter);
+	gtk_list_store_set(to_ctx->store, to_ctx->iter, 
+					   MAIN_NAME_COL, _cert_item_label
+                       (from_tree->is_valid, from_tree->nickname, from_tree->usage),
+					   MAIN_ID_COL, from_tree->key_str,
+					   MAIN_DOMAIN_COL, from_tree->domain_name,
+					   MAIN_DOM_TYPE_COL, to_ctx->domain_flags,
+					   -1);
+
+	if (from_tree->right)
+		_copy_search_tree(from_tree->right, to_ctx);
+}
+
+
+static void
+_release_search_tree(struct cert_info *node)
+{
+	g_free(node->nickname);
+	g_free(node->domain_name);
+	g_free(node->sortname);
+	g_free(node->usage);
+	g_free(node->key_str);
+	if (node->left)
+		_release_search_tree(node->left);
+	if (node->right)
+		_release_search_tree(node->right);
+}
+
 
 static int
 fill_cert_data(int pos, X509* cert, void* info)
 {
-	struct cert_display_info *cd_info = (struct cert_display_info*) info;
+	struct populate_context *pc = (struct populate_context*) info;
 	maemosec_key_id key_id;
 	char namebuf[256] = "";
 	char key_str[MAEMOSEC_KEY_ID_STR_LEN] = "";
@@ -445,13 +594,30 @@ fill_cert_data(int pos, X509* cert, void* info)
 	rc = maemosec_certman_key_id_to_str(key_id, key_str, sizeof(key_str));
 
 	MAEMOSEC_DEBUG(3, "Add '%s:%s:%s:%s'", 
-				   MAEMOSEC_CERTMAN_DOMAIN_SHARED==cd_info->domain_type?"shared":"private",
-				   cd_info->domain_name, namebuf, key_str);
+				   MAEMOSEC_CERTMAN_DOMAIN_SHARED==pc->domain_flags?"shared":"private",
+				   pc->domain_name, namebuf, key_str);
 
 	cis = malloc(sizeof(struct cert_info));
 	memset(cis, '\0', sizeof(struct cert_info));
+    cis->domain_name = g_strdup(pc->domain_name);
 	cis->nickname = g_strdup(namebuf);
-	cis->key_str = g_strdup(key_str);
+    if (MAX_TITLE_NAME_LEN < strlen(cis->nickname)) {
+        char* sep = cis->nickname + MAX_TITLE_NAME_LEN;
+        while ((sep > (cis->nickname + MAX_TITLE_NAME_LEN/2)) && (' ' != *sep))
+            sep--;
+        if (' ' != *sep) {
+            sep = cis->nickname + MAX_TITLE_NAME_LEN - 4;
+            strcpy(sep, "...");
+        } else
+            *sep = '\0';
+    }
+    if (MAEMOSEC_CERTMAN_DOMAIN_SHARED == pc->domain_flags)
+        cis->usage = g_strdup(_("cert_ti_main_notebook_all_users"));
+    else {
+        cis->usage = g_strdup(get_purpose_name(pc->domain_name));
+    }
+	cis->key_str  = g_strdup(key_str);
+    cis->is_valid = (0 == X509_check_cert_time(cert));
 
 	sif.buf = namebuf;
 	namebuf[0] = '\0';
@@ -471,12 +637,30 @@ fill_cert_data(int pos, X509* cert, void* info)
 	/*
 	 * Add the certificate into a binary search tree
 	 */
-	if (NULL == cd_info->search_tree)
-		cd_info->search_tree = cis;
+	if (NULL == pc->search_tree)
+		pc->search_tree = cis;
 	else {
-		add_point = cd_info->search_tree;
+		add_point = pc->search_tree;
 		while (add_point) {
-			int cmp = strcmp(cis->sortname, add_point->sortname);
+			int cmp;
+
+            /*
+             * If the certificate is already in the search tree, 
+             * just append to the usage code and domain in stead of 
+             * adding a new node.
+             */
+            if (0 == strcmp(cis->key_str, add_point->key_str)) {
+                gchar* tmp = add_point->usage;
+                add_point->usage = g_strdup_printf("%s, %s", tmp, cis->usage);
+                g_free(tmp);
+                tmp = add_point->domain_name;
+                add_point->domain_name = g_strdup_printf("%s,%s", tmp, cis->domain_name);
+                g_free(tmp);
+                _release_search_tree(cis);
+                break;
+            }
+
+            cmp = strcmp(cis->sortname, add_point->sortname);
 			if (0 > cmp) {
 				if (add_point->left)
 					add_point = add_point->left;
@@ -497,63 +681,13 @@ fill_cert_data(int pos, X509* cert, void* info)
 	return(0);
 }
 
-static gchar* 
-get_purpose_name(const char* for_domain_name)
-{
-	int i;
-
-	for (i = 0; NULL != pkcs12_targets[i].symbolic_name; i++) {
-		if (strlen(for_domain_name) >= strlen(pkcs12_targets[i].domain_name)
-			&& 0 == memcmp(pkcs12_targets[i].domain_name, 
-						   for_domain_name,
-						   strlen(pkcs12_targets[i].domain_name)))
-	    {
-			return(_(pkcs12_targets[i].symbolic_name));
-		}
-	}
-	return("");
-}
-
-
-static void
-_copy_search_tree(struct cert_info *node, struct cert_display_info* to_this)
-{
-	if (node->left)
-		_copy_search_tree(node->left, to_this);
-	MAEMOSEC_DEBUG(1, "%s", node->nickname);
-	gtk_list_store_append(to_this->store, to_this->iter);
-	gtk_list_store_set(to_this->store, to_this->iter, 
-					   MAIN_NAME_COL, node->nickname, 
-					   MAIN_PURPOSE_COL, get_purpose_name(to_this->domain_name), 
-					   MAIN_ID_COL, node->key_str,
-					   MAIN_DOMAIN_COL, to_this->domain_name,
-					   MAIN_DOM_TYPE_COL, to_this->domain_type,
-					   -1);
-	if (node->right)
-		_copy_search_tree(node->right, to_this);
-}
-
-static void
-_release_search_tree(struct cert_info *node)
-{
-	g_free(node->nickname);
-	g_free(node->sortname);
-	g_free(node->key_str);
-	if (node->left)
-		_release_search_tree(node->left);
-	if (node->right)
-		_release_search_tree(node->right);
-}
-
 
 static int 
 _populate_certificates(int pos, void* domain_name, void* ctx)
 {
-    GtkTreeIter iter;
     int rc;
 	domain_handle my_domain;
 	struct populate_context *pc = (struct populate_context*)ctx;
-	struct cert_display_info cd_info;
 
 	MAEMOSEC_DEBUG(1, "Enter, open domain '%s'", (char*)domain_name);
 
@@ -569,30 +703,10 @@ _populate_certificates(int pos, void* domain_name, void* ctx)
 	MAEMOSEC_DEBUG(1, "%s contains %d certificates", (char*)domain_name, 
 				   maemosec_certman_nbrof_certs(my_domain));
 
-	cd_info.domain_name = (char*)domain_name;
-	cd_info.domain_type = pc->domain_flags;
-	cd_info.store = pc->store;
-	cd_info.iter = &iter;
-	cd_info.search_tree = NULL;
-
-	rc = maemosec_certman_iterate_certs(my_domain, fill_cert_data, &cd_info);
+    pc->domain_name = domain_name;
+	rc = maemosec_certman_iterate_certs(my_domain, fill_cert_data, pc);
 	maemosec_certman_close_domain(my_domain);
 
-	/*
-	 * TODO: order newly appended certificate records
-	 */
-	if (cd_info.search_tree) {
-		/*
-		 * Add header only if there are certificates and only once
-		 */
-		if (NULL != pc->title) {
-			_add_row_header(pc->store, _(pc->title));
-			pc->title = NULL;
-		}
-
-		_copy_search_tree(cd_info.search_tree, &cd_info);
-		_release_search_tree(cd_info.search_tree);
-	}
 	/*
 	 * Continue iteration even if there are invalid domains.
 	 */
@@ -617,41 +731,9 @@ _is_row_header(GtkTreeModel *model,
 	if (NULL == key_str) {
 		if (NULL != title) {
 			if (header_text) {
-#if 0
-				/*
-				 * This logic does not work any more, as there
-				 * seems to be no deterministic order with which
-				 * the callback is called according to columns. 
-				 * So just always return the header and have
-				 * it duplicated.
-				 */
-				GtkTreePath* path = NULL;
-				gint* indices = NULL;
-				gint* last_row = (gint*)data;
-				path = gtk_tree_model_get_path(model, iter);
-				if (NULL != path) {
-					indices = gtk_tree_path_get_indices(path);
-					if (NULL != indices) {
-						int first_col = (*indices != *last_row);
-						MAEMOSEC_DEBUG(4, "%s: on row %d '%s' at %s", 
-									   __func__, 
-									   *indices, 
-									   title,
-									   first_col?"first col":"some other col"
-									   );
-						if (first_col) {
-							*header_text = g_strdup(title);
-							*last_row = *indices;
-						} else {
-							*header_text = g_strdup("");
-						}
-					}
-					gtk_tree_path_free(path);
-				}
-#endif
 				*header_text = g_strdup(title);
 			}
-			result = TRUE;
+            result = TRUE;
 		}
 	}
 	if (title)
@@ -684,7 +766,6 @@ _create_certificate_list(GtkWidget** list,
 
     *list_store = gtk_list_store_new(MAIN_NUM_COLUMNS,
                                      G_TYPE_STRING,      /* MAIN_NAME_COL */
-                                     G_TYPE_STRING,      /* MAIN_PURPOSE_COL */ 
 									 G_TYPE_STRING,      /* MAIN_ID_COL (hidden) */
 									 G_TYPE_STRING,      /* MAIN_DOMAIN_COL (hidden) */
 									 G_TYPE_INT,         /* MAIN_DOM_TYPE_COL (hidden) */
@@ -702,46 +783,24 @@ _create_certificate_list(GtkWidget** list,
     column = gtk_tree_view_column_new_with_attributes 
 		(NULL,
 		 renderer,
-        "text", 
+         //       "text", 
+		 // MAIN_NAME_COL,
+        "markup", 
 		 MAIN_NAME_COL,
 		 NULL);
 
     gtk_tree_view_column_set_widget(column, NULL);
     gtk_tree_view_append_column (GTK_TREE_VIEW(*list), column);
-	flip_flop = 0;
 	hildon_tree_view_set_row_header_func(GTK_TREE_VIEW(*list), 
-										 _is_row_header, &flip_flop, NULL);
-
-#if 0
-    g_object_set(G_OBJECT(column), "fixed-width", NAME_COL_WIDTH,
-                 "sizing", GTK_TREE_VIEW_COLUMN_FIXED, NULL);
-#endif
-
-    /* Certificate purpose column */
-	column = gtk_tree_view_column_new_with_attributes 
-		(NULL,
-		 renderer,
-		 "text", 
-		 MAIN_PURPOSE_COL,
-		 NULL);
-	gtk_tree_view_column_set_widget(column, NULL);
-	gtk_tree_view_append_column (GTK_TREE_VIEW(*list), column);
-	g_object_set(G_OBJECT(column), 
-				 "fixed-width", 
-				 PURPOSE_COL_WIDTH,
-				 "sizing", 
-				 GTK_TREE_VIEW_COLUMN_FIXED, 
-				 NULL);
+										 _is_row_header, NULL, NULL);
 
 	gtk_window_get_size(GTK_WINDOW(g_window), &wrap_width, NULL);
-	if (0 < wrap_width)
-		wrap_width = (gint)(wrap_width - PURPOSE_COL_WIDTH - 60);
-	else {
+	if (0 >= wrap_width) {
 		/*
 		 * Fallback
 		 */
 		MAEMOSEC_DEBUG(1, "%s: cannot compute word wrap length!", __func__);
-		wrap_width = 240;
+		wrap_width = 800;
 	}
 
 	/* Wrap long names */
@@ -755,53 +814,6 @@ _create_certificate_list(GtkWidget** list,
     return;
 }
 
-extern char *tzname[2];
-extern long timezone;
-extern int daylight;
-
-/* Local interface */
-
-typedef enum {
-    /** Full details dialog with all other buttons than install */
-    DIALOG_FULL,
-    /** The most simple details dialog with just Close-button */
-    DIALOG_SIMPLE,
-    /** The simple details dialog with an install button */
-    DIALOG_INSTALL
-} DetailsDialogType;
-
-
-
-
-/**
-   Creates the certificate details dialog with different parameters.
-
-   @param window        The parent window for the dialog.
-   @param type
-   @param cert_id
-   @param cert
-
-   @return TRUE, if the given certificate was installed. Returns always
-   FALSE, if cert_id is specified (and cert is not specified).
-*/
-static gboolean _certificate_details(gpointer window,
-                                     int domain_flags,
-                                     X509* cert);
-
-
-/**
-   Creates an infobox for a given certificate.
-
-   @param cert_id       ID for given certificate, or 0, if cert is provided
-   @param cert          Certificate, if no cert_id is 0.
-*/
-static GtkWidget* _create_infobox(gpointer window, X509* cert, gchar** btn_label);
-
-/**
-   Adds labels to the given table.
-*/
-static void _add_labels(GtkTable* table, gint* row,
-                        const gchar* label, const gchar* value, gboolean wrap);
 
 /* Implementation */
 static GtkWidget* 
@@ -842,147 +854,28 @@ create_scroller(GtkWidget* child)
 /*
  * Ask for a new password
  */
-struct new_password_entry_rec {
-	GtkWidget *entry1;
-	GtkWidget *entry2;
-	GtkWidget *button;
-};
-
-/*
- * Enable "Done" button only if the same, non-empty text
- * has been entered in both fields.
- */
-static void
-_check_new_password(GtkEditable *editable,  gpointer user_data)
-{
-	struct new_password_entry_rec *check_args = 
-		(struct new_password_entry_rec*) user_data;
-	const gchar *new_pwd, *ref_pwd;
-
-	new_pwd = gtk_entry_get_text(GTK_ENTRY(check_args->entry1));
-	ref_pwd = gtk_entry_get_text(GTK_ENTRY(check_args->entry2));
-	MAEMOSEC_DEBUG(1, "%s: '%s' - '%s'", __func__, new_pwd, ref_pwd);
-	if (new_pwd && ref_pwd && strlen(new_pwd) && (0 == strcmp(new_pwd,ref_pwd)))
-		gtk_widget_set_sensitive(check_args->button, TRUE);
-	else
-		gtk_widget_set_sensitive(check_args->button, FALSE);
-}
-
 
 static gchar*
 get_new_password(gpointer window) 
 {
-    GtkWidget* new_password_dialog = NULL;
-    GtkWidget* new_password = NULL;
-    GtkWidget* ref_password = NULL;
-    GtkWidget* ok_button = NULL;
-    GdkGeometry hints;
-    GtkSizeGroup *group = GTK_SIZE_GROUP(gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL));
-	gint response;
+    HildonSetPasswordDialog* new_password_dialog = NULL;
 	gchar* result = NULL;
-	struct new_password_entry_rec check_args;
+	gint response;
 
-	new_password_dialog = hildon_set_password_dialog_new(window, TRUE);
-	gtk_widget_show_all(new_password_dialog);
+	MAEMOSEC_DEBUG(1, "%s: Enter", __func__);
+	new_password_dialog = HILDON_SET_PASSWORD_DIALOG(hildon_set_password_dialog_new(window, TRUE));
+	gtk_widget_show_all(GTK_WIDGET(new_password_dialog));
 	do {
 		response = gtk_dialog_run(GTK_DIALOG(new_password_dialog));
 		if (GTK_RESPONSE_OK == response) {
-			result = g_strdup(hildon_set_password_dialog_get_password
-							  ((HildonSetPasswordDialog*)new_password_dialog));
+			result = g_strdup(hildon_set_password_dialog_get_password(new_password_dialog));
 			MAEMOSEC_DEBUG(1, "%s: changed password to '%s'", __func__, result);
 			break;
 		}
 	} while (GTK_RESPONSE_DELETE_EVENT != response);
 
-	gtk_widget_hide_all(new_password_dialog);
-	gtk_widget_destroy(new_password_dialog);
-	return(result);
-
-	/*
-	 * The rest of the code is dead, but implements much better
-	 * password changing logic that the default (and deprecated)
-	 * hilson_set_password_dialog. So let it be here the time being.
-	 */
-
-    /* Construct dialog */
-    new_password_dialog = gtk_dialog_new_with_buttons("Change password", /* TRANSLATE */
-												GTK_WINDOW(window),
-												GTK_DIALOG_MODAL
-												| GTK_DIALOG_DESTROY_WITH_PARENT
-												| GTK_DIALOG_NO_SEPARATOR,
-												NULL);
-
-	new_password = gtk_entry_new();
-    hildon_gtk_entry_set_input_mode (GTK_ENTRY (new_password), 
-									 HILDON_GTK_INPUT_MODE_FULL 
-									 | HILDON_GTK_INPUT_MODE_INVISIBLE);
-	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(new_password_dialog)->vbox), 
-					  hildon_caption_new(group, 
-										 "New password", /* TRANSLATE */
-										 new_password, 
-										 NULL, 
-										 HILDON_CAPTION_OPTIONAL));
-
-    ref_password = gtk_entry_new();
-    hildon_gtk_entry_set_input_mode (GTK_ENTRY (ref_password), 
-									 HILDON_GTK_INPUT_MODE_FULL 
-									 | HILDON_GTK_INPUT_MODE_INVISIBLE);
-	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(new_password_dialog)->vbox), 
-					  hildon_caption_new(group, 
-										 "Retype password",  /* TRANSLATE */
-										 ref_password, 
-										 NULL, 
-										 HILDON_CAPTION_OPTIONAL));
-
-    ok_button = gtk_dialog_add_button(GTK_DIALOG(new_password_dialog), 
-									  dgettext("hildon-libs", "wdgt_bd_done"),
-									  GTK_RESPONSE_OK);
-
-    /* Set window geometry */
-    hints.min_width  = PASSWD_MIN_WIDTH;
-    hints.min_height = PASSWD_MIN_HEIGHT;
-    hints.max_width  = PASSWD_MAX_WIDTH;
-    hints.max_height = PASSWD_MAX_HEIGHT;
-
-    gtk_window_set_geometry_hints(GTK_WINDOW(new_password_dialog),
-                                  new_password_dialog, &hints,
-                                  GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
-
-	gtk_widget_show_all(new_password_dialog);
-
-	/*
-	 * Start with "Done" button disabled and enable it 
-	 * when input is OK.
-	 */
-	check_args.entry1 = new_password;
-	check_args.entry2 = ref_password;
-	check_args.button = ok_button;
-
-	g_signal_connect(G_OBJECT(new_password),
-					 "changed",
-					 G_CALLBACK(_check_new_password),
-					 &check_args);
-
-	g_signal_connect(G_OBJECT(ref_password),
-					 "changed",
-					 G_CALLBACK(_check_new_password),
-					 &check_args);
-
-	gtk_widget_set_sensitive(ok_button, FALSE);
-
-	do {
-		response = gtk_dialog_run(GTK_DIALOG(new_password_dialog));
-		if (GTK_RESPONSE_OK == response) {
-			result = g_strdup(gtk_entry_get_text(GTK_ENTRY(new_password)));
-			break;
-		}
-	} while (GTK_RESPONSE_DELETE_EVENT != response);
-					   
-	gtk_widget_hide_all(new_password_dialog);
-	/* TODO: Should entries be destroyed as well? */
-	// gtk_widget_destroy(new_password);
-	// gtk_widget_destroy(ref_password);
-	gtk_widget_destroy(new_password_dialog);
+	gtk_widget_hide_all(GTK_WIDGET(new_password_dialog));
+	gtk_widget_destroy(GTK_WIDGET(new_password_dialog));
 	return(result);
 }
 
@@ -1030,7 +923,7 @@ _certificate_details(gpointer window,
 
 	if (MAEMOSEC_CERTMAN_DOMAIN_PRIVATE == domain_flags) {
 		dlg_title = _("cert_ti_viewing_dialog");
-		btn_label = _("cert_bd_c_delete");
+		btn_label = _("cert_ti_application_trust");
 
 	} else if (MAEMOSEC_CERTMAN_DOMAIN_SHARED == domain_flags) {
 		dlg_title = _("cert_ti_viewing_dialog");
@@ -1114,12 +1007,7 @@ _certificate_details(gpointer window,
                                   cert_dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
-	if (NULL != btn_label)
-		bn_button = gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
-										  btn_label,
-										  GTK_RESPONSE_APPLY);
-
-	if (has_private_key(cert)) {
+	if (has_private_key(cert) && INSTALL_CERT > domain_flags) {
 		/*
 		 * Some acrobacy needed to avoid localization changes
 		 */
@@ -1137,6 +1025,11 @@ _certificate_details(gpointer window,
 								  GTK_RESPONSE_CHANGE_PASSWORD);
 	}
 		
+	if (NULL != btn_label)
+		bn_button = gtk_dialog_add_button(GTK_DIALOG(cert_dialog),
+										  btn_label,
+										  GTK_RESPONSE_APPLY);
+
     /* Show and run the dialog */
 	MAEMOSEC_DEBUG(1, "Showing details");
     gtk_widget_show_all(cert_dialog);
@@ -1161,7 +1054,9 @@ _certificate_details(gpointer window,
 			gchar* old_password = NULL;
 			gchar* new_password = NULL;
 			int rc;
-
+            gchar *cert_name;
+            gchar* name_parts [3] = {NULL, NULL, STR_ARR_END_MARK};
+            
 			rc = maemosec_certman_get_key_id(cert, key_id);
 			if (0 != rc) {
 				MAEMOSEC_ERROR("%s: cannot get key id (%d)", __func__, rc);
@@ -1171,18 +1066,38 @@ _certificate_details(gpointer window,
 			/*
 			 * First get the private key with the old password
 			 */
+            pick_name_components_by_NIDS(X509_get_subject_name(cert), 
+                                         fullname_components,
+                                         sizeof(fullname_components)/sizeof(int), 
+                                         add_to_str_arr,
+                                         name_parts);
+            if (NULL != name_parts[1]) {
+                cert_name = g_strdup_printf("%s (%s)", name_parts[1], name_parts[0]);
+                g_free(name_parts[0]);
+                g_free(name_parts[1]);
+            } else if (NULL != name_parts[0]) {
+                cert_name = g_strdup(name_parts[0]);
+                g_free(name_parts[0]);
+            } else {
+                char temp [54];
+                rc = maemosec_certman_get_nickname(cert, temp, sizeof(temp));
+                cert_name = g_strdup(temp);
+            }
+            cert_name_for_get_privatekey = cert_name;
 			pkey = certmanui_get_privatekey(window, key_id, &old_password, NULL, NULL);
+            g_free(cert_name);
+            cert_name_for_get_privatekey = NULL;
 
 			/*
 			 * We don't need this any more
 			 */
+            MAEMOSEC_DEBUG(1, "%s: got old password '%s'", __func__, old_password);
 			if (old_password)
 				g_free(old_password);
 			if (NULL == pkey) {
 				MAEMOSEC_ERROR("%s: wrong password obviously", __func__);
 				continue;
 			}
-
 			/*
 			 * Then ask for the new password
 			 */
@@ -1226,15 +1141,8 @@ _certificate_details(gpointer window,
 gboolean 
 certmanui_install_certificate_details_dialog(gpointer window, X509* cert)
 {
-	int flags = MAEMOSEC_CERTMAN_DOMAIN_SHARED;
-
 	MAEMOSEC_DEBUG(1, "Called certmanui_install_certificate_details_dialog");
-	/*
-	 * TODO: validity checks
-	 */
-	if (X509_check_ca(cert)) 
-		flags = INSTALL_CERT;
-	return(_certificate_details(window, flags, cert));
+	return(_certificate_details(window, INSTALL_CERT, cert));
 }
 
 
@@ -1326,13 +1234,6 @@ set_multiline_value(GtkWidget* infobox, gint* row, const char* label, const char
 	} while (nl);
 }
 
-
-static const int fullname_components [] = {
-	NID_pkcs9_emailAddress, 
-	NID_commonName, 
-	NID_organizationalUnitName, 
-	NID_organizationName
-};
 
 struct cb_info {
 	GtkWidget* infobox;
@@ -1629,47 +1530,8 @@ _add_labels(GtkTable* table,
     *row += 1;
 }
 
-/**
-   Callback, which is called, when text in password entry has changed.
-
-   @param editable      The password entry
-   @param user_data     The OK-button.
-*/
-static void _passwd_text_changed(GtkEditable *editable,
-					 gpointer user_data);
-
-/**
-   Handler for the timeout. Decreases the left time and enables the
-   OK-button, if appropriate.
-
-   @param user_data     The OK-button.
-*/
-static gboolean _timeout_handler(gpointer user_data);
-
-
-/**
-   Handler for handling the response from password query.
-
-   @param dialog        Dialog, which got the response
-   @param response_id   Response id from the dialog.
-   @param data          CallbackParameter
-*/
-static void _password_dialog_response(GtkDialog* dialog,
-                                      gint response_id,
-                                      gpointer data);
 
 /* Implementation */
-
-guint timeout_id = 0;
-gint time_left = -1; /* time_left < 0 => terminate timeout */
-
-gint delays[] = {0, 1, 30, 300, -1};
-gint current_delay = 0;
-
-GtkWidget* enter_password_dialog = NULL;
-
-/* defined in importexport.c */
-extern gboolean close_store_on_exit;
 
 /* 
  * A global parameter for supplying the certificate
@@ -1677,7 +1539,27 @@ extern gboolean close_store_on_exit;
  * solution to be replaced by a new function when 
  * its status has been checked and the change sync'd.
  */
+
+/*
+ * TODO: Is the callback and cancel_privatekey ever used?
+ */
 gchar *cert_name_for_get_privatekey = "";
+
+struct pkey_passwd {
+    maemosec_key_id key_id;
+    EVP_PKEY* pkey;
+};
+
+static int
+test_pkey_password(void *data, const gchar* pwd)
+{
+    struct pkey_passwd *arg = (struct pkey_passwd*) data;
+    int rc;
+
+    rc = maemosec_certman_retrieve_key(arg->key_id, &arg->pkey, (char*)pwd);
+    return (0 == rc);
+}
+
 
 EVP_PKEY* 
 certmanui_get_privatekey(gpointer window, 
@@ -1686,273 +1568,49 @@ certmanui_get_privatekey(gpointer window,
 						 PrivateKeyResponseFunc callback,
 						 gpointer user_data)
 {
-    X509* cert = NULL;
-    gint response_id = 0;
 	char key_id_str [MAEMOSEC_KEY_ID_STR_LEN];
-
-    static PwdCallbackParameter params;
+    const gchar* pwd = g_strdup("");
+    struct pkey_passwd pwd_param;
 
 	maemosec_certman_key_id_to_str(cert_id, key_id_str, sizeof(key_id_str));
-	MAEMOSEC_DEBUG(1, "%s for %s", __func__, key_id_str);
+	MAEMOSEC_DEBUG(1, "%s: for %s", __func__, key_id_str);
 
-    /* Fill in params struct */
-    params.got_key = NULL;
-    memcpy(params.cert_id, cert_id, sizeof(params.cert_id));
-    params.callback = callback;
-    params.user_data = user_data;
-
-    /* Create password dialog */
-    enter_password_dialog = create_password_dialog(window,
-												   cert,
-												   _("cert_ti_enter_password"),
-												   cert_name_for_get_privatekey?
-												   cert_name_for_get_privatekey:"",
-                                                 _("cert_ia_password"),
-												   dgettext("hildon-libs", "wdgt_bd_done"),
-												   "",
-												   &params.passwd_entry,
-												   FALSE, 0);
-    gtk_widget_show_all(enter_password_dialog);
-
-    g_signal_connect(G_OBJECT(enter_password_dialog), "response",
-                     G_CALLBACK(_password_dialog_response), &params);
-
-    /* If there is no callback, then block, until we got definite answer */
-    if (callback == NULL)
-    {
-        response_id = GTK_RESPONSE_OK;
-        while(response_id == GTK_RESPONSE_OK &&
-              params.got_key == NULL)
-        {
-            response_id = gtk_dialog_run(GTK_DIALOG(enter_password_dialog));
-        }
-
-        /* Save password, if user is interested in it */
-
-        if (password != NULL && response_id == GTK_RESPONSE_OK)
-        {
-            *password = g_strdup(gtk_entry_get_text(
-                                     GTK_ENTRY(params.passwd_entry)));
-        }
-
-        gtk_widget_destroy(enter_password_dialog);
-        enter_password_dialog = NULL;
+    memcpy(pwd_param.key_id, cert_id, MAEMOSEC_KEY_ID_LEN);
+    pwd_param.pkey = NULL;
+    if (test_pkey_password(&pwd_param, "")) {
+        MAEMOSEC_DEBUG(1, "%s: No password %s", __func__, key_id_str);
+        if (password)
+            *password = g_strdup("");
+        return(pwd_param.pkey);
     }
 
-    return(params.got_key);
+    g_free((gchar*)pwd);
+    pwd = ask_password(window, TRUE, test_pkey_password, &pwd_param, 
+                       cert_name_for_get_privatekey?cert_name_for_get_privatekey:"");
+
+    if (password)
+        *password = (gchar*)pwd;
+    else
+        g_free((gchar*)pwd);
+
+    return pwd_param.pkey;
 }
 
 
-
-
-
+/*
+ * Does anyone use this?
+ */
 void 
 certmanui_cancel_privatekey(void)
 {
+    ;
+    /*
     if (enter_password_dialog != NULL)
     {
         gtk_dialog_response(GTK_DIALOG(enter_password_dialog),
                             GTK_RESPONSE_CANCEL);
     }
-}
-
-
-static void 
-_password_dialog_response(GtkDialog* dialog,
-						  gint response_id,
-						  gpointer data)
-{
-    PwdCallbackParameter* params = (PwdCallbackParameter*)data;
-    gchar* passwd = NULL;
-	int rc;
-
-    if (params == NULL)
-    {
-        MAEMOSEC_ERROR("No params for _password_dialog_response!");
-        return;
-    }
-
-    if (response_id == GTK_RESPONSE_OK)
-    {
-        /* Try to get the key with given password */
-        passwd = g_strdup(
-            gtk_entry_get_text(GTK_ENTRY(params->passwd_entry)));
-
-		MAEMOSEC_DEBUG(1, "Testing password '%s' for '%s'", passwd,
-					   dynhex(params->cert_id, MAEMOSEC_KEY_ID_LEN));
-
-		rc = maemosec_certman_retrieve_key(params->cert_id, &params->got_key, passwd);
-        if (0 == rc)
-        {
-			MAEMOSEC_DEBUG(1, "Success: password is correct");
-            /* Make duplicate of the key */
-            /* params->got_key = EVP_PKEY_dup(params->got_key); */
-        } else {
-            /* Password was wrong */
-			MAEMOSEC_DEBUG(1, "Wrong password, sorry!");
-
-            /* Clear entry and show infonote */
-            gtk_entry_set_text(GTK_ENTRY(params->passwd_entry), "");
-            hildon_banner_show_information (GTK_WIDGET (dialog), 
-											NULL, _("cer_ib_incorrect"));
-            gtk_widget_grab_focus(params->passwd_entry);
-            return;
-        }
-    }
-
-    /* If there is callback, call it */
-    if (params->callback != NULL)
-    {
-        gtk_widget_destroy(GTK_WIDGET(dialog));
-        enter_password_dialog = NULL;
-        params->callback(params->cert_id,
-                         params->got_key,
-                         passwd,
-                         params->user_data);
-    }
-
-    if (passwd != NULL) 
-		g_free(passwd);
-}
-
-
-GtkWidget* 
-create_password_dialog(gpointer window,
-					   X509* cert,
-					   const gchar* title,
-					   const gchar* greeting,
-					   const gchar* label,
-					   const gchar* ok_label,
-					   const gchar* cancel_label,
-					   GtkWidget** passwd_entry,
-					   gboolean install_timeout,
-					   guint min_chars)
-{
-    GtkWidget* password_dialog = NULL;
-    gchar* name = NULL;
-    GtkWidget* entry_text = NULL;
-    GtkWidget* ok_button = NULL;
-    GtkWidget* name_label = NULL;
-    GtkWidget* passwd_caption = NULL;
-    GdkGeometry hints;
-    GtkSizeGroup *group = GTK_SIZE_GROUP(
-        gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL));
-
-    static GtkWidget* params[2];
-
-    /* Construct dialog */
-    password_dialog = gtk_dialog_new_with_buttons(
-        title,
-        GTK_WINDOW(window),
-        GTK_DIALOG_MODAL
-        | GTK_DIALOG_DESTROY_WITH_PARENT
-        | GTK_DIALOG_NO_SEPARATOR,
-        NULL);
-
-    /* Add buttons to dialog */
-    ok_button = gtk_dialog_add_button(GTK_DIALOG(password_dialog),
-                                      ok_label,
-                                      GTK_RESPONSE_OK);
-
-	entry_text = gtk_label_new(greeting);
-	gtk_label_set_line_wrap(GTK_LABEL(entry_text), TRUE);
-	gtk_misc_set_alignment(GTK_MISC(entry_text), 0.0, 0.5);
-	gtk_container_add(
-        GTK_CONTAINER(GTK_DIALOG(password_dialog)->vbox),
-        entry_text);
-
-    /* Set window geometry */
-    hints.min_width  = PASSWD_MIN_WIDTH;
-    hints.min_height = PASSWD_MIN_HEIGHT;
-    hints.max_width  = PASSWD_MAX_WIDTH;
-    hints.max_height = PASSWD_MAX_HEIGHT;
-
-    gtk_window_set_geometry_hints(GTK_WINDOW(password_dialog),
-                                  password_dialog, &hints,
-                                  GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
-
-    /* If certificate != NULL, then provide "issued to" information */
-    if (cert != NULL)
-    {
-#if 0
-        name = get_certificate_name(cert);
-        name_label = gtk_label_new(name);
-        g_free(name);
-#endif
-        name = NULL;
-
-        gtk_misc_set_alignment(GTK_MISC(name_label), 0.0, 0.5);
-
-        gtk_container_add(
-            GTK_CONTAINER(GTK_DIALOG(password_dialog)->vbox),
-            name_label);
-    }
-
-    /* Create new entry and add it to caption control and to
-       dialog */
-    *passwd_entry = gtk_entry_new();
-    hildon_gtk_entry_set_input_mode (GTK_ENTRY (*passwd_entry), 
-									 HILDON_GTK_INPUT_MODE_FULL | HILDON_GTK_INPUT_MODE_INVISIBLE);
-
-    passwd_caption = hildon_caption_new(group,
-                                        label,
-                                        *passwd_entry,
-                                        NULL, HILDON_CAPTION_OPTIONAL);
-
-    gtk_container_add(
-        GTK_CONTAINER(GTK_DIALOG(password_dialog)->vbox),
-        passwd_caption);
-
-    /* Connect signal handler */
-    if (min_chars > 0)
-        g_signal_connect(G_OBJECT(*passwd_entry), "changed",
-                         G_CALLBACK(_passwd_text_changed),
-                         ok_button);
-
-    /* Set delay and add timeout, if it doesn't exist yet */
-    if (timeout_id > 0)
-    {
-        g_source_remove(timeout_id);
-        timeout_id = 0;
-    }
-
-    if (install_timeout)
-    {
-        if (delays[current_delay] < 0) current_delay = 0;
-        time_left = delays[current_delay];
-
-        params[0] = *passwd_entry;
-        params[1] = ok_button;
-        timeout_id = g_timeout_add(1000,
-                                   _timeout_handler,
-                                   &params);
-    }
-
-    /* Disable the OK-button */
-    if (min_chars > 0) gtk_widget_set_sensitive(ok_button, FALSE);
-
-    return(password_dialog);
-}
-
-
-static void _passwd_text_changed(GtkEditable *editable,
-                                 gpointer user_data)
-{
-    GtkWidget* button = GTK_WIDGET(user_data);
-    GtkEntry* entry = GTK_ENTRY(editable);
-    const gchar* text = NULL;
-
-    /* If entry or button is NULL, bail out */
-    if (entry == NULL || button == NULL) return;
-
-    text = gtk_entry_get_text(entry);
-
-    if (strlen(text) > 0 && time_left < 1)
-    {
-        gtk_widget_set_sensitive(button, TRUE);
-    } else {
-        gtk_widget_set_sensitive(button, FALSE);
-    }
+    */
 }
 
 
@@ -2005,47 +1663,6 @@ certmanui_info(gpointer window, GtkWidget* dialog, const char* text)
 	}
 }
 
-
-static gboolean 
-_timeout_handler(gpointer user_data)
-{
-    /* Get entry text */
-    const gchar* text = NULL;
-
-    GtkWidget** params = (GtkWidget**)user_data;
-    GtkWidget* passwd_entry;
-    GtkWidget* button;
-
-    if (params == NULL)
-    {
-        return FALSE;
-    }
-
-    if (time_left < 0)
-    {
-        timeout_id = 0;
-        return FALSE;
-    }
-
-    if (time_left > 0) {
-        time_left -= 1;
-        return TRUE;
-    }
-
-    /* Get params */
-    passwd_entry  = params[0];
-    button = params[1];
-
-    /* Enable button, if there is text in the entry */
-    text = gtk_entry_get_text(GTK_ENTRY(passwd_entry));
-    if (strlen(text) > 0)
-    {
-        gtk_widget_set_sensitive(button, TRUE);
-    }
-
-    timeout_id = 0;
-    return FALSE;
-}
 
 /*
  * Convenience function for showing a certain type of certificate expired dialog
@@ -2264,12 +1881,13 @@ cert_list_row_activated(GtkTreeView* tree,
 	gchar *name_str = NULL;
     gchar *cert_id  = NULL;
 	gchar *domain   = NULL;
+    GList* domains = NULL;
 	maemosec_key_id cert_key;
 	int rc, domain_flags;
 	domain_handle dh = 0;
 	X509 *cert = NULL;
-	gboolean do_delete = FALSE;
 	char* b64_cert = NULL;
+    gboolean is_valid;
 
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 
@@ -2289,13 +1907,58 @@ cert_list_row_activated(GtkTreeView* tree,
 					   MAIN_CONTENT_COL, &b64_cert,
 					   -1);
 
+    if (NULL != domain) {
+        
+        if (0 == strcmp(IMPORT_NEW_DOMAIN, domain)) {
+            ComappOpenSave opensave_data;
+            comapp_fc_result select_result;
+
+            GtkWidget *dialog;
+            gchar *filename = NULL;
+            gchar *mimetypes[] = {"application/x-osso-applet-certman",
+                                  "application/x-x509-ca-cert",
+                                  "application/x-pkcs12",
+                                  "application/pkcs7-mime",
+                                  "application/pkcs7-signature",
+                                  NULL};
+
+            memset(&opensave_data,0,sizeof(ComappOpenSave));
+    
+            opensave_data.action = GTK_FILE_CHOOSER_ACTION_OPEN;
+            opensave_data.parent = gtk_widget_get_ancestor(GTK_WIDGET(tree), GTK_TYPE_WINDOW);
+            opensave_data.open_window_title = _("cert_ti_main_notebook_import");
+            opensave_data.osso = osso_global;
+            opensave_data.mime_types = mimetypes; 
+
+            comapp_opensave_new(&opensave_data);
+            select_result = comapp_opensave_run(&opensave_data);
+            if (COMAPP_FILE_CHOOSER_SELECTED == select_result) {
+                filename = opensave_data.result_uri;
+                MAEMOSEC_DEBUG(1, "%s: import a new certificate from '%s'", __func__, filename);
+                if (certmanui_import_file(window, filename, NULL, NULL)) {
+                    gtk_list_store_clear(list_store);
+                    _populate_all_certificates(list_store);
+                }
+            }
+            g_free(opensave_data.result_uri);
+            goto end;
+        }
+        _split_string(domain, ',', &domains);
+        g_free(domain);
+        domain = NULL;
+    }
+
 	if (NULL == b64_cert) {
+        /*
+         * Get the certificate from the first domain it exists in
+         */
+        gchar* first_domain = g_list_nth_data(domains, 0);
 
 		MAEMOSEC_DEBUG(1, "%s: fetch %s:%s:%s:%s", __func__, 
 					   MAEMOSEC_CERTMAN_DOMAIN_SHARED==domain_flags?"shared":"private",
-					   domain, cert_id, name_str);
+					   first_domain, cert_id, name_str);
 
-		rc = maemosec_certman_open_domain(domain, domain_flags, &dh);
+		rc = maemosec_certman_open_domain(first_domain, domain_flags, &dh);
 		if (0 != rc) {
 			MAEMOSEC_ERROR("Cannot open domain '%s' (%d)", domain, rc);
 			goto end;
@@ -2317,6 +1980,9 @@ cert_list_row_activated(GtkTreeView* tree,
 		dh = 0;
 
 	} else {
+        /*
+         * Get the certificate from the base64 encoded data (when installing)
+         */
 		unsigned len;
 		unsigned char *cert_der = NULL;
 
@@ -2336,33 +2002,164 @@ cert_list_row_activated(GtkTreeView* tree,
 
 	window = gtk_widget_get_ancestor(GTK_WIDGET(tree),
 									 GTK_TYPE_WINDOW);
+    is_valid = (0 == X509_check_cert_time(cert));
 
-	do_delete = certmanui_certificate_details_dialog(window, domain_flags, cert);
+    while (certmanui_certificate_details_dialog(window, domain_flags, cert)) {
+        GList* tmp_domains = NULL;
+        GtkWidget* ask_domains_dialog = NULL;
+        gboolean doit = FALSE;
+        char domain_name[64];
+        GList *new_domains = NULL, *tmp = NULL,
+            *add_to = NULL, *remove_from = NULL;
+        gchar *help = NULL;
 
-	if (do_delete && NULL == b64_cert) {
-		do_delete = certmanui_confirm(window, cert, "cert_nc_confirm_dialog");
-	} else
-		do_delete = FALSE;
+        if (is_valid) {
+            tmp_domains = g_list_copy(domains);
+            doit = ask_domains(window, &ask_domains_dialog, &tmp_domains);
 
-	if (do_delete) {
-		rc = maemosec_certman_open_domain(domain, domain_flags, &dh);
-		if (0 == rc) {
-			rc = maemosec_certman_rm_cert(dh, cert_key);
-			if (0 == rc) {
-				certmanui_info(window, NULL, "cert_ib_uninstalled");
-				MAEMOSEC_DEBUG(1, "Certificate %s deleted", cert_id);
-				if (gtk_list_store_remove(list_store, &iter)) {
-					MAEMOSEC_DEBUG(1, "gtk_list_store_remove returned TRUE");
-					gtk_tree_model_row_deleted(model, path);
-				} else
-					MAEMOSEC_DEBUG(1, "gtk_list_store_remove returned FALSE");
-			}
-			maemosec_certman_close_domain(dh);
-			dh = 0;
-		}
-	}
+            gtk_widget_hide_all(ask_domains_dialog);
+            gtk_widget_destroy(ask_domains_dialog);
+
+            if (!doit) {
+                g_list_free(tmp_domains);
+                tmp_domains = NULL;
+                continue;
+            }
+
+            _join(tmp_domains, ",", &help);
+            MAEMOSEC_DEBUG(1, "%s: tmp domains is '%s'", __func__, help);
+            g_free(help);
+
+            for (tmp = tmp_domains; tmp && tmp->data; tmp = tmp->next) {
+                if (X509_check_ca(cert)) {
+                    snprintf(domain_name, sizeof(domain_name),
+                             CA_DOMAIN_FMT, (char*)tmp->data);
+                } else {
+                    snprintf(domain_name, sizeof(domain_name),
+                             USER_DOMAIN_FMT, (char*)tmp->data);
+                }
+                new_domains = g_list_append(new_domains, g_strdup(domain_name));
+            }
+
+            _join(domains, ",", &help);
+            MAEMOSEC_DEBUG(1, "%s: old domains is '%s'", __func__, help);
+            g_free(help);
+
+            _join(new_domains, ",", &help);
+            MAEMOSEC_DEBUG(1, "%s: new domains is '%s'", __func__, help);
+            g_free(help);
+
+            /*
+             * If removing from all domains, ask for confirmation
+             */
+            if (0 == g_list_length(new_domains)) {
+                if (!certmanui_confirm(window, cert, "cert_nc_confirm_dialog")) {
+                    g_list_free(new_domains);
+                    new_domains = NULL;
+                    continue;
+                }
+            }
+
+            _list_difference(domains, new_domains, &remove_from);
+            _join(remove_from, ",", &help);
+            MAEMOSEC_DEBUG(1, "%s: remove from domains '%s'", __func__, help);
+            g_free(help);
+
+            _list_difference(new_domains, domains, &add_to);
+            _join(add_to, ",", &help);
+            MAEMOSEC_DEBUG(1, "%s: add to domains '%s'", __func__, help);
+            g_free(help);
+
+        } else {
+            if (certmanui_confirm(window, cert, "cert_nc_confirm_dialog")) {
+                remove_from = g_list_copy(domains);
+            } else {
+                continue;
+            }
+        }
+
+        for (tmp = remove_from; tmp && tmp->data; tmp = tmp->next) {
+            rc = maemosec_certman_open_domain(tmp->data, domain_flags, &dh);
+            if (0 == rc) {
+                rc = maemosec_certman_rm_cert(dh, cert_key);
+                if (0 == rc)
+                    MAEMOSEC_DEBUG(1, "%s: removed from domain  '%s'", __func__, tmp->data);
+                maemosec_certman_close_domain(dh);
+                dh = 0;
+            }
+        }
+
+        for (tmp = add_to; tmp && tmp->data; tmp = tmp->next) {
+            rc = maemosec_certman_open_domain(tmp->data, domain_flags, &dh);
+            if (0 == rc) {
+                rc = maemosec_certman_add_cert(dh, cert);
+                if (0 == rc)
+                    MAEMOSEC_DEBUG(1, "%s: added to domain  '%s'", __func__, tmp->data);
+                maemosec_certman_close_domain(dh);
+                dh = 0;
+            }
+        }
+
+        g_list_free(domains);
+        domains = g_list_copy(new_domains);
+
+        if (0 == g_list_length(domains)) {
+            /*
+             * Certificate removed entirely
+             */
+            certmanui_info(window, NULL, "cert_ib_uninstalled");
+            MAEMOSEC_DEBUG(1, "%s: certificate %s deleted", __func__, cert_id);
+            if (gtk_list_store_remove(list_store, &iter)) {
+                MAEMOSEC_DEBUG(1, "%s: gtk_list_store_remove returned TRUE", __func__);
+                gtk_tree_model_row_deleted(model, path);
+                break;
+            } else
+                MAEMOSEC_DEBUG(1, "gtk_list_store_remove returned FALSE");
+
+        } else {
+            /*
+             * Update the domains and usage info in the main list
+             * TODO: Remove redundancy with copy_search_tree 
+             */
+            gchar *new_domains_str, *new_usage_str;
+            GList *new_usages = NULL;
+            char cert_name [256];
+	
+            maemosec_certman_get_nickname(cert, cert_name, sizeof(cert_name));
+
+            _join(domains, ",", &new_domains_str);
+            for (tmp = domains; tmp && tmp->data; tmp = tmp->next) {
+                new_usages = g_list_append(new_usages, g_strdup(get_purpose_name(tmp->data)));
+            }
+            _join(new_usages, ", ", &new_usage_str);
+
+            MAEMOSEC_DEBUG(1, "%s: %s new usage %s", __func__, cert_name, new_usage_str);
+
+            gtk_list_store_set(list_store, &iter, 
+                               MAIN_NAME_COL, 
+                               _cert_item_label(TRUE, cert_name, new_usage_str),
+                               MAIN_DOMAIN_COL, new_domains_str,
+                               -1);
+
+            gtk_tree_model_row_changed(model, path, &iter);
+            g_list_free(new_usages);
+            g_free(new_usage_str);
+            // g_free(new_domains_str);
+        }
+
+        g_list_free(remove_from);
+        remove_from = NULL;
+        g_list_free(add_to);
+        add_to = NULL;
+        g_list_free(new_domains);
+        new_domains = NULL;
+        g_list_free(tmp_domains);
+        tmp_domains = NULL;
+    } // while
 
  end:
+    if (domains)
+        g_list_free(domains);
 	if (dh)
 		maemosec_certman_close_domain(dh);
 	if (cert)
@@ -2371,8 +2168,6 @@ cert_list_row_activated(GtkTreeView* tree,
 		g_free(b64_cert);
 	if (name_str)
 		g_free(name_str);
-	if (domain)
-		g_free(domain);
 	if (cert_id)
 		g_free(cert_id);
 	return;
@@ -2393,63 +2188,47 @@ report_openssl_error(const char* str, size_t len, void* u)
 
 #define MAX_RETRIES 10
 
-gchar*
+const gchar*
 ask_password(gpointer window, 
-			 int test_password(void* data, gchar* pwd), 
+             gboolean object_is_cert,
+			 int test_password(void* data, const gchar* pwd), 
 			 void* data, 
 			 const char* info)
 {
+	HildonGetPasswordDialog* password_dialog = NULL;
 	gint response = 0;
-	GtkWidget* password_dialog = NULL;
-	GtkWidget* passwd_entry  = NULL;
-	gchar *result, *temp = NULL;
-	int retries = 0;
+	const gchar *result;
 
-	MAEMOSEC_DEBUG(1, "Ask password");
-	password_dialog = create_password_dialog(
-		window,
-		NULL,
-		_("cert_ti_enter_file_password"),
-		temp = g_strdup_printf(_("cert_ia_explain_file_password"), info),
-		_("cert_ia_password"),
-		dgettext("hildon-libs", "wdgt_bd_done"),
-		"",
-		&passwd_entry,
-		FALSE, 
-		0);
-
-	gtk_widget_show_all(password_dialog);
-	do {
-		response = gtk_dialog_run(GTK_DIALOG(password_dialog));
-		if (response == GTK_RESPONSE_OK) {
-			result = g_strdup(gtk_entry_get_text(GTK_ENTRY(passwd_entry)));
-			MAEMOSEC_DEBUG(1, "entered password '%s'", result);
-			if (test_password(data, result)) {
-				MAEMOSEC_DEBUG(1, "password is OK");
-				break;
-			} else {
-				MAEMOSEC_DEBUG(1, "password is not OK");
-				gtk_entry_set_text(GTK_ENTRY(passwd_entry), "");
-				hildon_banner_show_information(password_dialog, 
+	MAEMOSEC_DEBUG(1, "%s: Enter", __func__);
+	password_dialog = HILDON_GET_PASSWORD_DIALOG(hildon_get_password_dialog_new(window, TRUE));
+    if (object_is_cert) 
+        hildon_get_password_dialog_set_message(password_dialog, info);
+    else
+        hildon_get_password_dialog_set_message(password_dialog,
+                                               g_strdup_printf(_("cert_ia_explain_file_password"), 
+                                                               info));
+    // hildon_get_password_dialog_set_max_characater(password_dialog, 100);
+	gtk_widget_show_all(GTK_WIDGET(password_dialog));
+    do {
+        response = gtk_dialog_run(GTK_DIALOG(password_dialog));
+        if (GTK_RESPONSE_OK == response) {
+            result = g_strdup(hildon_get_password_dialog_get_password(password_dialog));
+            if (!test_password(data, result)) {
+                g_object_set(G_OBJECT(password_dialog), "password", "", NULL);
+				hildon_banner_show_information(GTK_WIDGET(password_dialog), 
 											   NULL, 
 											   _("cer_ib_incorrect"));
-				gtk_widget_grab_focus(passwd_entry);
-				g_free(result);
-			}
-		} else
-			result = NULL;
-	} while (result && ++retries < MAX_RETRIES);
+                g_free((void*)result);
+                result = NULL;
+            } else
+                break;
+        }
+    } while (GTK_RESPONSE_DELETE_EVENT != response);
+    
+	gtk_widget_hide_all(GTK_WIDGET(password_dialog));
+	gtk_widget_destroy(GTK_WIDGET(password_dialog));
 
-	if (!result && GTK_RESPONSE_OK == response) {
-		MAEMOSEC_ERROR("Failed to enter correct password");
-	}
-
-	gtk_widget_hide_all(password_dialog);
-	gtk_widget_destroy(password_dialog);
-
-	if (temp)
-		g_free(temp);
-	return(result);
+    return(result);
 }
 
 
@@ -2550,20 +2329,18 @@ certmanui_install_certificates_dialog(gpointer window,
 			&& 0 == maemosec_certman_key_id_to_str(key_id, key_id_str, sizeof(key_id_str)))
 				gtk_list_store_set(contents_store, &iter, MAIN_ID_COL, key_id_str, -1);
 
-		if (X509_check_ca(cert)) {
-			cert_type = "cert_li_certificate_signing";
-		} else if (NULL != pkey) {
-			/*
-			 * TODO: Add a key icon to denote the existence of
-			 * a private key.
-			 */
-			cert_type = "cert_li_certificate_user";
-		} else {
-			cert_type = "cert_li_certificate_user";
-		}
-		gtk_list_store_set(contents_store, &iter, 
-						   MAIN_NAME_COL, _(cert_type),
-						   MAIN_PURPOSE_COL, namebuf,
+        /*
+         * TODO: The certificate type is not shown at all
+         */
+        if (X509_check_ca(cert)) {
+            cert_type = "cert_li_certificate_signing";
+        } else if (NULL != pkey) {
+            cert_type = "cert_li_certificate_user";
+        } else {
+            cert_type = "cert_li_certificate_user";
+        }
+        gtk_list_store_set(contents_store, &iter, 
+						   MAIN_NAME_COL, namebuf,
 						   -1);
 		free(b64cert);
 		OPENSSL_free(cder);
@@ -2610,7 +2387,8 @@ ask_domains(gpointer window,
 			GtkWidget **dialog,
 			GList** domains)
 {
-	gint response;
+    gboolean had_previous = FALSE;
+	gint response, pos;
 	HildonTouchSelector *selector;
 	GdkGeometry hints;
 	GtkWidget* panarea;
@@ -2642,8 +2420,33 @@ ask_domains(gpointer window,
 	hildon_touch_selector_set_column_selection_mode
 		(selector, HILDON_TOUCH_SELECTOR_SELECTION_MODE_MULTIPLE);
 
-	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) 
+    pos = -1;
+	for (tgt = pkcs12_targets; tgt->symbolic_name; tgt++) {
+        GList* tmp;
 		hildon_touch_selector_append_text(selector, _(tgt->symbolic_name));
+        pos++;
+        if (*domains) {
+            for (tmp = *domains; tmp && tmp->data; tmp = tmp->next) {
+                MAEMOSEC_DEBUG(1, "%s: check if '%s' matches '%s'", __func__,
+                               tgt->domain_name, tmp->data);
+                if (0 == memcmp(tgt->domain_name, tmp->data, strlen(tgt->domain_name))
+                    || 0 == strcmp("*", tmp->data)) 
+                {
+                    GtkTreePath* path;
+                    GtkTreeIter iter;
+                    MAEMOSEC_DEBUG(1, "%s: it does, activate %d", __func__, pos);
+                    path = gtk_tree_path_new_from_indices(pos, -1);
+                    if (path) {
+                        if (gtk_tree_model_get_iter(hildon_touch_selector_get_model(selector, 0),
+                                                    &iter, path))
+                            hildon_touch_selector_select_iter(selector, 0, &iter, FALSE);
+                        gtk_tree_path_free(path);
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
 	panarea = hildon_pannable_area_new();
 	gtk_container_add(GTK_CONTAINER(panarea), (GtkWidget*)(selector));
@@ -2658,7 +2461,11 @@ ask_domains(gpointer window,
     response = gtk_dialog_run(GTK_DIALOG(*dialog));
 	MAEMOSEC_DEBUG(1, "Response = %d", response);
 
-	*domains = NULL;
+    if (*domains) {
+        had_previous = TRUE;
+        g_list_free(*domains);
+        *domains = NULL;
+    }
 	selected = hildon_touch_selector_get_selected_rows(selector, 0);
 	while (selected) {
 		GtkTreePath *sel = (GtkTreePath*)(selected->data);
@@ -2671,7 +2478,7 @@ ask_domains(gpointer window,
 
 	MAEMOSEC_DEBUG(1, "Exit %s", __func__);
 
-	return(GTK_RESPONSE_APPLY == response && 0 < g_list_length(*domains));
+	return(GTK_RESPONSE_APPLY == response && (0 < g_list_length(*domains) || had_previous));
 }
 
 
@@ -2724,6 +2531,10 @@ certmanui_import_file(gpointer window,
 
 	MAEMOSEC_DEBUG(1, "Ask purpose");
 
+    /*
+     * Enable all uses by default
+     */
+    domains = g_list_append(NULL, "*");
 	do_install = ask_domains(window, &dialog, &domains);
 		
 	if (!do_install) 
@@ -2804,4 +2615,71 @@ certmanui_import_file(gpointer window,
 	if (certs)
 		sk_X509_free(certs);
 	return(TRUE);
+}
+
+
+static int
+_split_string(gchar* string, gchar separator, GList** to_list)
+{
+    gchar *start, *end;
+
+    if (NULL == string)
+        return 0;
+
+    start = string;
+    while (*start) {
+        end = strchr(start, separator);
+        if (end) {
+            *end = '\0';
+            *to_list = g_list_append(*to_list, g_strdup(start));
+            start = end + 1;
+            *end = separator;
+        } else {
+            *to_list = g_list_append(*to_list, g_strdup(start));
+            break;
+        }
+    }
+    return g_list_length(*to_list);
+}
+
+
+static int
+_list_difference(GList* in_this, GList* but_not_in_this, GList** copy_here)
+{
+    if (NULL == copy_here)
+        return 0;
+    for (; in_this && in_this->data; in_this = in_this->next) {
+        gboolean found = FALSE;
+        GList* tmp = NULL;
+        for (tmp = but_not_in_this; tmp && tmp->data; tmp = tmp->next) {
+            if (0 == strcmp(in_this->data, tmp->data)) {
+                found = TRUE;
+                break;
+            }
+        }
+        if (!found) {
+            *copy_here = g_list_append(*copy_here, g_strdup(in_this->data));
+        }
+    }
+    return g_list_length(*copy_here);
+}
+
+
+static void
+_join(GList* the_list, gchar* with_separator, gchar** to_string)
+{
+    gchar** str_array;
+    int pos = 0;
+
+    if (NULL == the_list) {
+        *to_string = g_strdup("");
+        return;
+    }
+    str_array = (gchar**)malloc((1 + g_list_length(the_list)) * sizeof(gchar*));
+    for (; the_list && the_list->data; the_list = the_list->next) {
+        str_array[pos++] = the_list->data;
+    }
+    str_array[pos] = NULL;
+    *to_string = g_strjoinv(with_separator, str_array);
+    free(str_array);
 }

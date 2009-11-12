@@ -2,6 +2,7 @@
 
 # These come from configure-script's module dependency checks
 INCLUDES = $(HILDON_CFLAGS) -DLOCALEDIR=\"$(localedir)\" \
+	-DMAEMOSEC_DEBUG_ENABLED \
         $(OSSO_CFLAGS)  -DPREFIX=\"$(prefix)\" -DBIN_DIR=\"$(bindir)\" \
 	$(GCONF_CFLAGS) $(OPENSSL_CFLAGS) $(MAEMOSEC_FLAGS) \
 	$(X_CFLAGS) $(GNOME_VFS_CFLAGS)

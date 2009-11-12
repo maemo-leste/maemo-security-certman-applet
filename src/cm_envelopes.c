@@ -165,7 +165,7 @@ show_pkcs7_info(STACK_OF(PKCS12_SAFEBAG) *bags)
 
 
 static int
-test_pkcs12_password(void* on_data, gchar* password)
+test_pkcs12_password(void* on_data, const gchar* password)
 {
 	PKCS12* data = (PKCS12*) on_data;
 	
@@ -306,9 +306,11 @@ extract_envelope(gpointer window,
 ) {
 	int rc;
     FILE *fp = NULL;
-	const char* shortname;
-	const char* filetype;
-	void* idata;
+	gchar* shortname = NULL;
+	const char* filetype = NULL;
+	void* idata = NULL;
+    GnomeVFSURI* vfs_uri = NULL;
+    gboolean result = FALSE;
 
 	*certs = NULL;
 	*pkey = NULL;
@@ -318,14 +320,23 @@ extract_envelope(gpointer window,
 		MAEMOSEC_ERROR("Cannot open '%s'", fileuri);
 		return(FALSE);
 	}
-	shortname = strrchr(fileuri, '/');
-	if (!shortname)
-		shortname = fileuri;
-	else
-		shortname++;
+    vfs_uri = gnome_vfs_uri_new(fileuri);
+    if (NULL != vfs_uri) {
+        shortname = gnome_vfs_uri_extract_short_name(vfs_uri);
+        free(vfs_uri);
+        vfs_uri = NULL;
+    }
+    if (NULL == shortname) {
+        shortname = strrchr(fileuri, '/');
+        if (NULL == shortname)
+            shortname = fileuri;
+        else
+            shortname++;
+    }
+
 	filetype = determine_filetype(fp, &idata);
 
-	MAEMOSEC_DEBUG(1, "'%s' seems to be '%s'", shortname, filetype);
+	MAEMOSEC_DEBUG(1, "file '%s' seems to be '%s'", shortname, filetype);
 
 	/*
 	 * TODO: Are there envelopes that can contain more than
@@ -347,7 +358,7 @@ extract_envelope(gpointer window,
 		if (test_pkcs12_password(idata, ""))
 			*password = g_strdup("");
 		else
-			*password = ask_password(window, test_pkcs12_password, idata, shortname);
+			*password = ask_password(window, FALSE, test_pkcs12_password, idata, shortname);
 
 		rc = PKCS12_parse((PKCS12*)idata, *password, pkey, &cert, &cas);
 		MAEMOSEC_DEBUG(1, "parse PKCS12 returned %d", rc);
@@ -370,16 +381,16 @@ extract_envelope(gpointer window,
 				sk_X509_push(*certs, X509_dup(cert));
 			}
 			sk_X509_free(cas);
-			return(0 < sk_X509_num(*certs));
+			result = (0 < sk_X509_num(*certs));
 		} else
-			return(FALSE);
+			result = FALSE;
 
 	} else if (0 == strcmp(filetype, "X509-PEM")
 		   ||  0 == strcmp(filetype, "X509-DER")) 
 	{
 		*certs = sk_X509_new_null();
 		sk_X509_push(*certs, (X509*)idata);
-		return(TRUE);
+		result = TRUE;
 
 	} else if (0 == strcmp(filetype, "PKCS7")) {
 		PKCS7* p7 = (PKCS7*)idata;
@@ -400,10 +411,14 @@ extract_envelope(gpointer window,
 				return(FALSE);
 				break;
 			}
-		return(TRUE);
+		result = TRUE;
 
 	} else {
 		MAEMOSEC_ERROR("Unsupported filetype '%s'", filetype);
-		return(FALSE);
+		result = FALSE;
 	}
+    shortname = NULL;
+    free(shortname);
+    
+    return result;
 }
