@@ -292,12 +292,12 @@ ui_create_main_dialog(gpointer window)
         return NULL;
     }
 	g_window = window;
+    MAEMOSEC_DEBUG(1, "%s: main window is %p", __func__, window);
 
     /* Create dialog and set its attributes */
     main_dialog = gtk_dialog_new_with_buttons(_("cema_ap_application_title"),
                                          GTK_WINDOW(window),
-                                         GTK_DIALOG_MODAL
-                                         | GTK_DIALOG_DESTROY_WITH_PARENT
+                                         GTK_DIALOG_DESTROY_WITH_PARENT
                                          | GTK_DIALOG_NO_SEPARATOR,
                                          NULL);
     if (NULL == main_dialog)
@@ -352,6 +352,16 @@ _populate_all_certificates(GtkListStore* cert_list_store)
 
     MAEMOSEC_DEBUG(1, "%s: enter", __func__);
 
+    /*
+     * Add an item to import a new certificate
+     */
+    gtk_list_store_append(cert_list_store, &iter);
+    gtk_list_store_set(cert_list_store, &iter,
+                       MAIN_NAME_COL, _("cert_ti_main_notebook_import"),
+                       MAIN_ID_COL, IMPORT_NEW_DOMAIN,
+                       MAIN_DOMAIN_COL, IMPORT_NEW_DOMAIN,
+                       -1);
+
 	MAEMOSEC_DEBUG(1, "%s: populate user certificates", __func__);
 
 	pc.store = cert_list_store;
@@ -403,16 +413,6 @@ _populate_all_certificates(GtkListStore* cert_list_store)
 		_copy_search_tree(pc.search_tree, &pc);
 		_release_search_tree(pc.search_tree);
 	}
-
-    /*
-     * Add an item to import a new certificate
-     */
-    gtk_list_store_append(cert_list_store, &iter);
-    gtk_list_store_set(cert_list_store, &iter,
-                       MAIN_NAME_COL, _("cert_ti_main_notebook_import"),
-                       MAIN_ID_COL, IMPORT_NEW_DOMAIN,
-                       MAIN_DOMAIN_COL, IMPORT_NEW_DOMAIN,
-                       -1);
 
     MAEMOSEC_DEBUG(1, "%s: exit", __func__);
 }
@@ -869,12 +869,16 @@ get_new_password(gpointer window)
 	gint response;
 
 	MAEMOSEC_DEBUG(1, "%s: Enter", __func__);
-	new_password_dialog = HILDON_SET_PASSWORD_DIALOG(hildon_set_password_dialog_new(window, TRUE));
+	new_password_dialog = HILDON_SET_PASSWORD_DIALOG
+        (hildon_set_password_dialog_new(window, TRUE));
 	gtk_widget_show_all(GTK_WIDGET(new_password_dialog));
 	do {
 		response = gtk_dialog_run(GTK_DIALOG(new_password_dialog));
+        MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, response);
+
 		if (GTK_RESPONSE_OK == response) {
-			result = g_strdup(hildon_set_password_dialog_get_password(new_password_dialog));
+			result = g_strdup(hildon_set_password_dialog_get_password
+                              (new_password_dialog));
 			MAEMOSEC_DEBUG(1, "%s: changed password to '%s'", __func__, result);
 			break;
 		}
@@ -905,8 +909,6 @@ _certificate_details(gpointer window,
 					 X509* cert)
 {
     GtkWidget* cert_dialog = NULL;
-    GtkWidget* cert_notebook = NULL;
-    GtkWidget* cert_main_page = NULL;
 	GtkWidget *bn_button = NULL;
 	GtkWidget *change_password_button = NULL;
 
@@ -924,8 +926,7 @@ _certificate_details(gpointer window,
         return FALSE;
     }
 
-    /* Check if cert_dialog != NULL */
-	MAEMOSEC_DEBUG(1, "%s: show simple dialog", __func__);
+	MAEMOSEC_DEBUG(1, "%s: window is %p", __func__, window);
 
 	if (MAEMOSEC_CERTMAN_DOMAIN_PRIVATE == domain_flags) {
 		dlg_title = _("cert_ti_viewing_dialog");
@@ -944,23 +945,16 @@ _certificate_details(gpointer window,
 		btn_label = NULL;
 	}
 
-	if (cert_dialog == NULL) {
-		cert_dialog = gtk_dialog_new_with_buttons
-			(
-			 dlg_title,
-			 GTK_WINDOW(window),
-			 GTK_DIALOG_MODAL
-			 | GTK_DIALOG_DESTROY_WITH_PARENT
-			 | GTK_DIALOG_NO_SEPARATOR,
-			 NULL
-			 );
+    cert_dialog = gtk_dialog_new_with_buttons(dlg_title,
+                                              GTK_WINDOW(window),
+                                              GTK_DIALOG_DESTROY_WITH_PARENT
+                                              | GTK_DIALOG_NO_SEPARATOR,
+                                              NULL);
 
-		if (cert_dialog == NULL) {
-			MAEMOSEC_ERROR("Failed to create dialog");
-			return(FALSE);
-		}
-
-	}
+    if (cert_dialog == NULL) {
+        MAEMOSEC_ERROR("Failed to create dialog");
+        return(FALSE);
+    }
 
     infobox = _create_infobox(window, cert, &btn_label);
 
@@ -988,8 +982,6 @@ _certificate_details(gpointer window,
     /* Put infobox scroller to right place */
 	gtk_container_add(GTK_CONTAINER(GTK_DIALOG(cert_dialog)->vbox),
 					  scroller);
-
-	gtk_container_add(GTK_CONTAINER(cert_main_page), scroller);
 
     /* Set window geometry */
     hints.min_width  = DETAILS_MIN_WIDTH;
@@ -1040,15 +1032,9 @@ _certificate_details(gpointer window,
 	MAEMOSEC_DEBUG(1, "Showing details");
     gtk_widget_show_all(cert_dialog);
 
-    if (cert_notebook)
-    {
-        gtk_widget_grab_focus(cert_notebook);
-    }
-
     do {
-        MAEMOSEC_DEBUG(1, "Before gtk_dialog_run");
         ret = gtk_dialog_run(GTK_DIALOG(cert_dialog));
-        MAEMOSEC_DEBUG(1, "After gtk_dialog_run=%d", ret);
+        MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, ret);
 
         if (GTK_RESPONSE_APPLY == ret) {
 			result = TRUE;
@@ -1136,11 +1122,9 @@ _certificate_details(gpointer window,
 	/* TODO: Infobox needs not to be destroyed? */
 	infobox = NULL;
 
-    /* Save store and delete dialog, if they weren't initialized */
-
 	gtk_widget_destroy(cert_dialog);
-	if (bn_button)
-		gtk_widget_destroy(bn_button);
+	// if (bn_button)
+	// 	gtk_widget_destroy(bn_button);
     return(result);
 }
 
@@ -1708,8 +1692,7 @@ certmanui_certificate_expired_with_name
 		(
 		 _("cert_nc_expired"),
 		 GTK_WINDOW(window),
-		 GTK_DIALOG_MODAL
-		 | GTK_DIALOG_DESTROY_WITH_PARENT
+		 GTK_DIALOG_DESTROY_WITH_PARENT
 		 | GTK_DIALOG_NO_SEPARATOR,
 		 NULL);
 
@@ -1740,6 +1723,7 @@ certmanui_certificate_expired_with_name
                response_id != GTK_RESPONSE_DELETE_EVENT)
         {
             response_id = gtk_dialog_run(GTK_DIALOG(expired_dialog));
+            MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, response_id);
         }
 
         gtk_widget_destroy(expired_dialog);
@@ -1913,6 +1897,8 @@ cert_list_row_activated(GtkTreeView* tree,
 					   MAIN_CONTENT_COL, &b64_cert,
 					   -1);
 
+	window = gtk_widget_get_ancestor(GTK_WIDGET(tree), GTK_TYPE_WINDOW);
+
     if (NULL != domain) {
         
         if (0 == strcmp(IMPORT_NEW_DOMAIN, domain)) {
@@ -1998,8 +1984,6 @@ cert_list_row_activated(GtkTreeView* tree,
 			free(cert_der);
 	}
 
-	window = gtk_widget_get_ancestor(GTK_WIDGET(tree),
-									 GTK_TYPE_WINDOW);
     is_valid = (0 == X509_check_cert_time(cert));
 
     while (certmanui_certificate_details_dialog(window, domain_flags, cert)) {
@@ -2209,6 +2193,7 @@ ask_password(gpointer window,
 	gtk_widget_show_all(GTK_WIDGET(password_dialog));
     do {
         response = gtk_dialog_run(GTK_DIALOG(password_dialog));
+        MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, response);
         if (GTK_RESPONSE_OK == response) {
             result = g_strdup(hildon_get_password_dialog_get_password(password_dialog));
             if (!test_password(data, result)) {
@@ -2253,8 +2238,7 @@ certmanui_install_certificates_dialog(gpointer window,
 	install_dialog = gtk_dialog_new_with_buttons
 		(_("cert_ti_install_certificates"),
 		 GTK_WINDOW(window),
-		 GTK_DIALOG_MODAL
-		 | GTK_DIALOG_DESTROY_WITH_PARENT
+		 GTK_DIALOG_DESTROY_WITH_PARENT
 		 | GTK_DIALOG_NO_SEPARATOR,
 		 NULL);
 
@@ -2359,9 +2343,8 @@ certmanui_install_certificates_dialog(gpointer window,
     gtk_widget_show_all(install_dialog);
 
 	do {
-        MAEMOSEC_DEBUG(1, "Before gtk_dialog_run");
         ret = gtk_dialog_run(GTK_DIALOG(install_dialog));
-        MAEMOSEC_DEBUG(1, "After gtk_dialog_run ret=%d", ret);
+        MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, ret);
 
         if (GTK_RESPONSE_APPLY == ret) {
 			MAEMOSEC_DEBUG(1, "%s: Install!", __func__);
@@ -2397,10 +2380,9 @@ ask_domains(gpointer window,
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 	
 	*dialog = gtk_dialog_new_with_buttons(_("cert_ti_application_trust"),
-										 GTK_WINDOW(window),
-										 GTK_DIALOG_MODAL
-										 | GTK_DIALOG_DESTROY_WITH_PARENT
-										 | GTK_DIALOG_NO_SEPARATOR,
+                                          GTK_WINDOW(window),
+                                          GTK_DIALOG_DESTROY_WITH_PARENT
+                                          | GTK_DIALOG_NO_SEPARATOR,
 										 NULL);
     hints.min_width  = MIN_WIDTH;
     hints.min_height = MIN_HEIGHT + 100;
@@ -2452,12 +2434,10 @@ ask_domains(gpointer window,
 	gtk_widget_set_size_request(GTK_WIDGET(panarea), 0, 0);
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), panarea);
 
-	MAEMOSEC_DEBUG(1, "Show dialog");
 	gtk_widget_show_all(*dialog);
 
-	MAEMOSEC_DEBUG(1, "Run dialog");
     response = gtk_dialog_run(GTK_DIALOG(*dialog));
-	MAEMOSEC_DEBUG(1, "Response = %d", response);
+	MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, response);
 
     if (*domains) {
         had_previous = TRUE;

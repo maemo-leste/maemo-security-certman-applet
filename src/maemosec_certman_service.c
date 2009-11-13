@@ -142,6 +142,14 @@ void hw_event_handler(osso_hw_state_t *state, gpointer data)
 {
     (void) data;
 
+    MAEMOSEC_DEBUG(1, "%s: shutdown %s save %s memlow %s sysinact %s devmode %d",
+                   state->shutdown_ind?"on":"off",
+                   state->save_unsaved_data_ind?"on":"off",
+                   state->memory_low_ind?"on":"off",
+                   state->system_inactivity_ind?"on":"off",
+                   state->sig_device_mode_ind?"on":"off",
+                   state->sig_device_mode_ind);
+
     if (state->shutdown_ind) {
         /* Rebooting */
         gtk_main_quit();
