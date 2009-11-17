@@ -203,8 +203,8 @@ osso_rpc_cb(const gchar *interface,
 
 		if (1 < args->len) {
 			name = g_array_index(args, osso_rpc_t, 1);
-			if (DBUS_TYPE_STRING == name.type)
-				cert_name_for_get_privatekey = name.value.s;
+			// if (DBUS_TYPE_STRING == name.type)
+			// 	cert_name_for_get_privatekey = name.value.s;
 		}
 
 		rc = maemosec_certman_str_to_key_id(val.value.s, key_id);

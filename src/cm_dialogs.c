@@ -521,6 +521,34 @@ get_purpose_name(const char* for_domain_name)
 }
 
 static gchar*
+get_user_cert_name(X509* cert)
+{
+    int rc;
+    gchar *cert_name;
+    gchar *name_parts [3] = {NULL, NULL, STR_ARR_END_MARK};
+            
+    pick_name_components_by_NIDS(X509_get_subject_name(cert), 
+                                 fullname_components,
+                                 sizeof(fullname_components)/sizeof(int), 
+                                 add_to_str_arr,
+                                 name_parts);
+    if (NULL != name_parts[1]) {
+        cert_name = g_strdup_printf("%s (%s)", name_parts[1], name_parts[0]);
+        g_free(name_parts[0]);
+        g_free(name_parts[1]);
+    } else if (NULL != name_parts[0]) {
+        cert_name = g_strdup(name_parts[0]);
+        g_free(name_parts[0]);
+    } else {
+        char temp [54] = "";
+        rc = maemosec_certman_get_nickname(cert, temp, sizeof(temp));
+        cert_name = g_strdup(temp);
+    }
+    return cert_name;
+}
+
+
+static gchar*
 _cert_item_label(gboolean is_valid, gchar* nickname, gchar* usages)
 {
     gchar *res;
@@ -1047,7 +1075,6 @@ _certificate_details(gpointer window,
 			gchar* new_password = NULL;
 			int rc;
             gchar *cert_name;
-            gchar* name_parts [3] = {NULL, NULL, STR_ARR_END_MARK};
             
 			rc = maemosec_certman_get_key_id(cert, key_id);
 			if (0 != rc) {
@@ -1055,26 +1082,7 @@ _certificate_details(gpointer window,
 				continue;
 			}
 
-			/*
-			 * First get the private key with the old password
-			 */
-            pick_name_components_by_NIDS(X509_get_subject_name(cert), 
-                                         fullname_components,
-                                         sizeof(fullname_components)/sizeof(int), 
-                                         add_to_str_arr,
-                                         name_parts);
-            if (NULL != name_parts[1]) {
-                cert_name = g_strdup_printf("%s (%s)", name_parts[1], name_parts[0]);
-                g_free(name_parts[0]);
-                g_free(name_parts[1]);
-            } else if (NULL != name_parts[0]) {
-                cert_name = g_strdup(name_parts[0]);
-                g_free(name_parts[0]);
-            } else {
-                char temp [54];
-                rc = maemosec_certman_get_nickname(cert, temp, sizeof(temp));
-                cert_name = g_strdup(temp);
-            }
+            cert_name = get_user_cert_name(cert);
             cert_name_for_get_privatekey = cert_name;
 			pkey = certmanui_get_privatekey(window, key_id, &old_password, NULL, NULL);
             g_free(cert_name);
@@ -1561,9 +1569,11 @@ certmanui_get_privatekey(gpointer window,
 	char key_id_str [MAEMOSEC_KEY_ID_STR_LEN];
     const gchar* pwd = g_strdup("");
     struct pkey_passwd pwd_param;
+    gchar* info = NULL;
 
 	maemosec_certman_key_id_to_str(cert_id, key_id_str, sizeof(key_id_str));
-	MAEMOSEC_DEBUG(1, "%s: for %s", __func__, key_id_str);
+	MAEMOSEC_DEBUG(1, "%s: for %s/'%s'", __func__, key_id_str, 
+                   cert_name_for_get_privatekey?cert_name_for_get_privatekey:"(NULL)");
 
     memcpy(pwd_param.key_id, cert_id, MAEMOSEC_KEY_ID_LEN);
     pwd_param.pkey = NULL;
@@ -1571,17 +1581,59 @@ certmanui_get_privatekey(gpointer window,
         MAEMOSEC_DEBUG(1, "%s: No password %s", __func__, key_id_str);
         if (password)
             *password = g_strdup("");
+        if (callback)
+            callback(cert_id, pwd_param.pkey, "", user_data);
         return(pwd_param.pkey);
     }
 
     g_free((gchar*)pwd);
-    pwd = ask_password(window, TRUE, test_pkey_password, &pwd_param, 
-                       cert_name_for_get_privatekey?cert_name_for_get_privatekey:"");
+
+    if (NULL == cert_name_for_get_privatekey 
+        || 0 == strlen(cert_name_for_get_privatekey)) 
+    {
+        /*
+         * Search for the corresponding certificate from user-domains
+         */
+        const struct pkcs12_target *tgt;
+        gchar domain_name[256];
+
+        MAEMOSEC_DEBUG(1, "%s: constructing name", __func__);
+
+        for (tgt = pkcs12_targets; tgt->symbolic_name && NULL == info; tgt++) {
+            domain_handle domh;
+            int rc;
+            X509* cert;
+
+            snprintf(domain_name, sizeof(domain_name), USER_DOMAIN_FMT, tgt->domain_name);
+            rc = maemosec_certman_open_domain(domain_name, 
+                                              MAEMOSEC_CERTMAN_DOMAIN_PRIVATE,
+                                              &domh);
+            if (0 == rc) {
+                rc = maemosec_certman_load_cert(domh, cert_id, &cert);
+                if (0 == rc) {
+                    info = get_user_cert_name(cert);
+                    MAEMOSEC_DEBUG(1, "%s: name is '%s'", __func__, info);
+                    X509_free(cert);
+                    cert = NULL;
+                }
+                maemosec_certman_close_domain(domh);
+            }
+        }
+    } else
+        info = cert_name_for_get_privatekey;
+
+    pwd = ask_password(window, TRUE, test_pkey_password, &pwd_param, info);
+
+    if (callback && NULL != pwd)
+        callback(cert_id, pwd_param.pkey, (gchar*)pwd, user_data);
 
     if (password)
         *password = (gchar*)pwd;
     else
         g_free((gchar*)pwd);
+
+    if (info != cert_name_for_get_privatekey && info)
+        g_free(info);
 
     return pwd_param.pkey;
 }
@@ -2181,14 +2233,23 @@ ask_password(gpointer window,
 	gint response = 0;
 	const gchar *result;
 
+    /*
+     * Use generic hildon_get_password_dialog. It is unfortunately broken
+     * in that the set_caption-function does not set the caption but in stead
+     * the label of the password field. The caption is always "Current password".
+     * So setting caption is disabled at the moment.
+     */
 	MAEMOSEC_DEBUG(1, "%s: Enter", __func__);
 	password_dialog = HILDON_GET_PASSWORD_DIALOG(hildon_get_password_dialog_new(window, TRUE));
-    if (object_is_cert) 
+    if (object_is_cert) {
+        // hildon_get_password_dialog_set_caption(password_dialog, _("cert_ti_enter_password"));
         hildon_get_password_dialog_set_message(password_dialog, info);
-    else
+    } else {
+        // hildon_get_password_dialog_set_caption(password_dialog, _("cert_ti_enter_file_password"));
         hildon_get_password_dialog_set_message(password_dialog,
                                                g_strdup_printf(_("cert_ia_explain_file_password"), 
                                                                info));
+    }
     // hildon_get_password_dialog_set_max_characater(password_dialog, 100);
 	gtk_widget_show_all(GTK_WIDGET(password_dialog));
     do {
