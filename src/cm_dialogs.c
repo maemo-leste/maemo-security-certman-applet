@@ -2234,21 +2234,17 @@ ask_password(gpointer window,
 	const gchar *result;
 
     /*
-     * Use generic hildon_get_password_dialog. It is unfortunately broken
-     * in that the set_caption-function does not set the caption but in stead
-     * the label of the password field. The caption is always "Current password".
-     * So setting caption is disabled at the moment.
+     * Use generic hildon_get_password_dialog.
      */
 	MAEMOSEC_DEBUG(1, "%s: Enter", __func__);
-	password_dialog = HILDON_GET_PASSWORD_DIALOG(hildon_get_password_dialog_new(window, TRUE));
+	password_dialog = HILDON_GET_PASSWORD_DIALOG(hildon_get_password_dialog_new(window, FALSE));
     if (object_is_cert) {
-        // hildon_get_password_dialog_set_caption(password_dialog, _("cert_ti_enter_password"));
+        gtk_window_set_title(GTK_WINDOW(password_dialog), _("cert_ti_enter_password"));
         hildon_get_password_dialog_set_message(password_dialog, info);
     } else {
-        // hildon_get_password_dialog_set_caption(password_dialog, _("cert_ti_enter_file_password"));
-        hildon_get_password_dialog_set_message(password_dialog,
-                                               g_strdup_printf(_("cert_ia_explain_file_password"), 
-                                                               info));
+        gtk_window_set_title(GTK_WINDOW(password_dialog), _("cert_ti_enter_file_password"));
+        hildon_get_password_dialog_set_message
+            (password_dialog, g_strdup_printf(_("cert_ia_explain_file_password"), info));
     }
     // hildon_get_password_dialog_set_max_characater(password_dialog, 100);
 	gtk_widget_show_all(GTK_WIDGET(password_dialog));
