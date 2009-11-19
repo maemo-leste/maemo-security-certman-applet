@@ -4,6 +4,7 @@ maemo-security-certman-applet (0.1.0) unstable; urgency=low
     and usage code at the second line.
       Fixes: NB#133458
       Fixes: NB#122480
+      Fixes: NB#122916
   * Put the password button in the proper place 
       Fixes: NB#143537
   * Fixed the interaction when delete is cancelled

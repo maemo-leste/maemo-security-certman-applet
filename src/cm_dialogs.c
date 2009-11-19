@@ -1584,7 +1584,7 @@ certmanui_get_privatekey(gpointer window,
         if (password)
             *password = g_strdup(pwd);
         if (callback)
-            callback(cert_id, pwd_param.pkey, pwd, user_data);
+            callback(cert_id, pwd_param.pkey, (gchar*)pwd, user_data);
         return(pwd_param.pkey);
     }
 
