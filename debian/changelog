@@ -1,19 +1,29 @@
 maemo-security-certman-applet (0.1.0) unstable; urgency=low
 
+  * Made all dialogs non system modal
+      Fixes: NB#127225
   * Change layout to use only one column, with two lines at each item
     and usage code at the second line.
-      Fixes: NB#133458
-      Fixes: NB#122480
       Fixes: NB#122916
-  * Put the password button in the proper place 
+      Fixes: NB#124820
+      Fixes: NB#128698
+      Fixes: NB#133458
+  * Put the password button in the proper place.
       Fixes: NB#143537
-  * Fixed the interaction when delete is cancelled
+  * Fixed the interaction when delete is cancelled.
       Fixes: NB#143536
   * Use gnome_vfs_uri_extract_shortname to show the name of a file 
-    to be installed
+    to be installed.
       Fixes: NB#144040
+  * Added an import certificate button at the top of the certificate
+    list and a file chooser dialog to install certificates directly
+    from the control panel applet. File Manager still works, too.
+      Fixes: NB#147496
+  * Use a default non-empty password to encrypt the private key when
+    password protection is removed to make them work with connectivity.
+      Fixes: NB#147499
 
- -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Tue, 18 Aug 2009 19:10:00 +0300
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 20 Nov 2009 19:10:00 +0300
 
 maemo-security-certman-applet (0.0.9) unstable; urgency=low
   

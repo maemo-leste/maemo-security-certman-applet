@@ -74,13 +74,13 @@ enum {
 #define MIN_WIDTH               592
 #define MIN_HEIGHT              360
 #define MAX_WIDTH               800
-#define MAX_HEIGHT              360
+#define MAX_HEIGHT              404
 
 /* Size for the details dialog */
 #define DETAILS_MIN_WIDTH       482
 #define DETAILS_MIN_HEIGHT      360
 #define DETAILS_MAX_WIDTH       800
-#define DETAILS_MAX_HEIGHT      360
+#define DETAILS_MAX_HEIGHT      404
 
 #define ICONSIZE                HILDON_ICON_PIXEL_SIZE_SMALL
 
@@ -89,9 +89,10 @@ enum {
 #define MAX_DIGEST_LEN          128
 
 /*
- * User-defined response code
+ * User-defined response codes
  */
 #define GTK_RESPONSE_CHANGE_PASSWORD 1001
+#define GTK_RESPONSE_RM_CERTIFICATE  1002
 /*
  * When password protection is turned off, 
  * use still something to encrypt the PCKCS#8
@@ -327,7 +328,7 @@ ui_create_main_dialog(gpointer window)
                      cert_list_store);
 
     /*
-     * Add an item to import a new certificate
+     * Add a button to import a new certificate
      */
     GtkWidget *import_button = hildon_button_new (HILDON_SIZE_AUTO_WIDTH | HILDON_SIZE_FINGER_HEIGHT, 
                                                   HILDON_BUTTON_ARRANGEMENT_HORIZONTAL);
@@ -345,19 +346,12 @@ ui_create_main_dialog(gpointer window)
     g_signal_connect(G_OBJECT(import_button), "clicked", G_CALLBACK(_import_certificate), 
                      &import_context);
 
-#define SPACING 2
-    GtkWidget *vbox = gtk_vbox_new(FALSE, SPACING);
-    gtk_box_pack_start(GTK_BOX(vbox), import_button, FALSE, FALSE, SPACING);
-    gtk_box_pack_start(GTK_BOX(vbox), cert_list, TRUE, TRUE, SPACING);
-#undef SPACING
-
 	GtkWidget *panarea = hildon_pannable_area_new();
 
-    /*
-     * Cannot add directly with gtk_container_add but must use viewport,
-     * since vbox doesn't have a native scrolling capability.
-     */
-    hildon_pannable_area_add_with_viewport(HILDON_PANNABLE_AREA(panarea), vbox);
+    gtk_box_pack_start(GTK_BOX(hildon_tree_view_get_action_area_box(GTK_TREE_VIEW(cert_list))),
+                       import_button, TRUE, TRUE, 0);
+    hildon_tree_view_set_action_area_visible(GTK_TREE_VIEW(cert_list), TRUE);
+    gtk_container_add(GTK_CONTAINER(panarea), cert_list);
     gtk_container_add(GTK_CONTAINER(GTK_DIALOG(main_dialog)->vbox), panarea);
 
     _populate_all_certificates(cert_list_store);
@@ -365,7 +359,7 @@ ui_create_main_dialog(gpointer window)
 	MAEMOSEC_DEBUG(1, "Show all");
 	gtk_widget_show_all(main_dialog);
 
-    return(main_dialog);
+    return main_dialog;
 }
 
 
@@ -741,7 +735,7 @@ fill_cert_data(int pos, X509* cert, void* info)
     }
 #endif
     if (MAEMOSEC_CERTMAN_DOMAIN_SHARED == pc->domain_flags)
-        cis->usage = g_strdup(_("cert_ti_main_notebook_all_users"));
+        cis->usage = g_strdup(_("cert_ti_main_notebook_allusers"));
     else {
         cis->usage = g_strdup(get_purpose_name(pc->domain_name));
     }
@@ -2153,7 +2147,6 @@ cert_list_row_activated(GtkTreeView* tree,
             gtk_tree_model_row_changed(model, path, &iter);
             g_list_free(new_usages);
             g_free(new_usage_str);
-            // g_free(new_domains_str);
         }
 
         g_list_free(remove_from);
@@ -2435,7 +2428,7 @@ ask_domains(gpointer window,
 	GdkGeometry hints;
 	GtkWidget* panarea;
 	GtkWidget* bn_button;
-	GList *selected;
+	GList *selected = NULL;
 	const struct pkcs12_target *tgt;
 
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
@@ -2452,6 +2445,12 @@ ask_domains(gpointer window,
 
 	gtk_window_set_geometry_hints(GTK_WINDOW(*dialog), *dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
+
+    if (*domains && 0 != strcmp("*", (*domains)->data)) {
+        bn_button = gtk_dialog_add_button(GTK_DIALOG(*dialog),
+                                          _("cert_bd_c_delete"),
+                                          GTK_RESPONSE_RM_CERTIFICATE);
+    }
 
 	bn_button = gtk_dialog_add_button(GTK_DIALOG(*dialog),
 									  _("cert_bd_trust_settings_ok"),
@@ -2505,19 +2504,23 @@ ask_domains(gpointer window,
         g_list_free(*domains);
         *domains = NULL;
     }
-	selected = hildon_touch_selector_get_selected_rows(selector, 0);
-	while (selected) {
-		GtkTreePath *sel = (GtkTreePath*)(selected->data);
-		gchar* domain_name = pkcs12_targets[*gtk_tree_path_get_indices(sel)].domain_name;
-		MAEMOSEC_DEBUG(1, "%s: selected '%s'", __func__, domain_name);
-		*domains = g_list_append(*domains, g_strdup(domain_name));
-		selected = selected->next;
-	}
-	g_list_free(selected);
+
+    if (GTK_RESPONSE_APPLY == response) {
+        selected = hildon_touch_selector_get_selected_rows(selector, 0);
+        while (selected) {
+            GtkTreePath *sel = (GtkTreePath*)(selected->data);
+            gchar* domain_name = pkcs12_targets[*gtk_tree_path_get_indices(sel)].domain_name;
+            MAEMOSEC_DEBUG(1, "%s: selected '%s'", __func__, domain_name);
+            *domains = g_list_append(*domains, g_strdup(domain_name));
+            selected = selected->next;
+        }
+        g_list_free(selected);
+    }
 
 	MAEMOSEC_DEBUG(1, "Exit %s", __func__);
 
-	return(GTK_RESPONSE_APPLY == response && (0 < g_list_length(*domains) || had_previous));
+	return((GTK_RESPONSE_APPLY == response || GTK_RESPONSE_RM_CERTIFICATE == response)
+           && (0 < g_list_length(*domains) || had_previous));
 }
 
 
