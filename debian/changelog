@@ -8,6 +8,7 @@ maemo-security-certman-applet (0.1.0) unstable; urgency=low
       Fixes: NB#124820
       Fixes: NB#128698
       Fixes: NB#133458
+      Fixes: NB#147867
   * Put the password button in the proper place.
       Fixes: NB#143537
   * Fixed the interaction when delete is cancelled.
@@ -19,6 +20,7 @@ maemo-security-certman-applet (0.1.0) unstable; urgency=low
     list and a file chooser dialog to install certificates directly
     from the control panel applet. File Manager still works, too.
       Fixes: NB#147496
+      Fixes: NB#147853
   * Use a default non-empty password to encrypt the private key when
     password protection is removed to make them work with connectivity.
       Fixes: NB#147499
