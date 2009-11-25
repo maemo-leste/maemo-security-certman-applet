@@ -1,4 +1,4 @@
-AC_INIT([maemo-security-certman-applet], [0.1.0])
+AC_INIT([maemo-security-certman-applet], [0.1.1])
 
 # Tests that source dir exists
 AC_CONFIG_SRCDIR([src/applet_main.c])

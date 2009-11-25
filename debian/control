@@ -37,7 +37,7 @@ Description: Debug symbols for the certificate manager external UI library.
 Package: libmaemosec-certman-applet-dev
 Section: libdevel
 Architecture: any
-Depends: libglib2.0-dev, libhildon1-dev, libmaemosec-certman-applet0, libmaemosec-certman-dev
+Depends: libglib2.0-dev, libhildon1-dev, libcomapp-dev, libmaemosec-certman-applet0, libmaemosec-certman-dev
 Description: Header files for Certificate Manager UI.
  Contains files, which can be helpful when developing software, 
  that needs certificate management UI services.

@@ -87,7 +87,7 @@ enum {
 #define NAMEBUF_LEN             256
 #define MAX_TITLE_NAME_LEN      72
 #define MAX_DIGEST_LEN          128
-
+#define BANNER_SHOW_TIMEOUT     2000
 /*
  * User-defined response codes
  */
@@ -184,7 +184,6 @@ X509_check_cert_time(X509* cert);
 
 static gboolean
 ask_domains(gpointer window, 
-			GtkWidget **dialog,
 			GList** domains);
 
 static gboolean 
@@ -217,7 +216,6 @@ typedef struct {
 GtkWidget* cert_list = NULL;
 GtkListStore* cert_list_store = NULL;
 osso_context_t *osso_global;
-GtkWindow* g_window = NULL;
 GdkGeometry hints;
 
 /*
@@ -293,7 +291,6 @@ ui_create_main_dialog(gpointer window)
 		MAEMOSEC_DEBUG(1, "%s: NULL window, exit", __func__);
         return NULL;
     }
-	g_window = window;
     MAEMOSEC_DEBUG(1, "%s: main window is %p", __func__, window);
 
     /* Create dialog and set its attributes */
@@ -926,6 +923,7 @@ certmanui_certificate_details_dialog(gpointer window,
 }
 
 #define INSTALL_CERT 0x08000000
+#define SHOW_CERT    0x08000001
 
 static gboolean
 _certificate_details(gpointer window,
@@ -965,7 +963,7 @@ _certificate_details(gpointer window,
 		btn_label = _("cert_bd_cd_install");
 
 	} else {
-		dlg_title = _("cert_ti_install_certificate");
+		dlg_title = _("cert_ti_viewing_dialog");
 		btn_label = NULL;
 	}
 
@@ -1134,8 +1132,15 @@ _certificate_details(gpointer window,
 gboolean 
 certmanui_install_certificate_details_dialog(gpointer window, X509* cert)
 {
-	MAEMOSEC_DEBUG(1, "Called certmanui_install_certificate_details_dialog");
-	return(_certificate_details(window, INSTALL_CERT, cert));
+    /*
+     * The tablet-browser-ui calls this function in stead of the 
+     * certmanui_certificate_details_dialog to show certificate details,
+     * but still we do not want to show the install button for it.
+     * If the certificate really should be installed, we should do 
+     * it here.
+     */
+	MAEMOSEC_DEBUG(1, "%s: window=%p", __func__, window);
+	return(_certificate_details(window, SHOW_CERT, cert));
 }
 
 
@@ -1681,7 +1686,7 @@ certmanui_confirm(gpointer window, X509* cert, const char* title)
 static gboolean
 timeout_close_dialog(gpointer* the_dialog)
 {
-	MAEMOSEC_DEBUG(1, "Entered %s", __func__);
+	MAEMOSEC_DEBUG(1, "%s: Enter", __func__);
 	gtk_widget_hide_all((GtkWidget*)the_dialog);
 	gtk_widget_destroy(GTK_WIDGET(the_dialog));
 	return(FALSE);
@@ -1689,15 +1694,21 @@ timeout_close_dialog(gpointer* the_dialog)
 
 
 static void
-certmanui_info(gpointer window, GtkWidget* dialog, const char* text)
+certmanui_info(gpointer window, const char* text)
 {
-	guint rc;
-	if (window)
-		hildon_banner_show_information(window, NULL, _(text));
+    MAEMOSEC_DEBUG(1, "%s: banner on %p", __func__, window);
+    if (window)
+        hildon_banner_show_information(window, NULL, _(text));
 	else {
-		hildon_banner_show_information((gpointer)dialog, NULL, _(text));
-		rc = gtk_timeout_add(2000, (GtkFunction)timeout_close_dialog, dialog);
-		gtk_dialog_run(GTK_DIALOG(dialog));
+        GtkWidget* wdgt = gtk_dialog_new();
+        gint rc;
+
+        gtk_window_set_title(GTK_WINDOW(wdgt), _("cema_ap_application_title"));
+		hildon_banner_show_information((gpointer)wdgt, NULL, _(text));
+		rc = gtk_timeout_add(BANNER_SHOW_TIMEOUT, 
+                             (GtkFunction)timeout_close_dialog, 
+                             wdgt);
+		gtk_dialog_run(GTK_DIALOG(wdgt));
 	}
 }
 
@@ -2009,7 +2020,6 @@ cert_list_row_activated(GtkTreeView* tree,
 
     while (certmanui_certificate_details_dialog(window, domain_flags, cert)) {
         GList* tmp_domains = NULL;
-        GtkWidget* ask_domains_dialog = NULL;
         gboolean doit = FALSE;
         char domain_name[NAMEBUF_LEN];
         GList *new_domains = NULL, *tmp = NULL,
@@ -2018,10 +2028,7 @@ cert_list_row_activated(GtkTreeView* tree,
 
         if (is_valid) {
             tmp_domains = g_list_copy(domains);
-            doit = ask_domains(window, &ask_domains_dialog, &tmp_domains);
-
-            gtk_widget_hide_all(ask_domains_dialog);
-            gtk_widget_destroy(ask_domains_dialog);
+            doit = ask_domains(window, &tmp_domains);
 
             if (!doit) {
                 g_list_free(tmp_domains);
@@ -2110,7 +2117,7 @@ cert_list_row_activated(GtkTreeView* tree,
             /*
              * Certificate removed entirely
              */
-            certmanui_info(window, NULL, "cert_ib_uninstalled");
+            certmanui_info(window, "cert_ib_uninstalled");
             MAEMOSEC_DEBUG(1, "%s: certificate %s deleted", __func__, cert_id);
             if (gtk_list_store_remove(list_store, &iter)) {
                 MAEMOSEC_DEBUG(1, "%s: gtk_list_store_remove returned TRUE", __func__);
@@ -2419,40 +2426,40 @@ certmanui_install_certificates_dialog(gpointer window,
 
 static gboolean
 ask_domains(gpointer window, 
-			GtkWidget **dialog,
 			GList** domains)
 {
     gboolean had_previous = FALSE;
 	gint response, pos;
 	HildonTouchSelector *selector;
 	GdkGeometry hints;
-	GtkWidget* panarea;
-	GtkWidget* bn_button;
+    GtkWidget *dialog;
+	GtkWidget *panarea;
+	GtkWidget *bn_button;
 	GList *selected = NULL;
 	const struct pkcs12_target *tgt;
 
 	MAEMOSEC_DEBUG(1, "Enter %s", __func__);
 	
-	*dialog = gtk_dialog_new_with_buttons(_("cert_ti_application_trust"),
-                                          GTK_WINDOW(window),
-                                          GTK_DIALOG_DESTROY_WITH_PARENT
-                                          | GTK_DIALOG_NO_SEPARATOR,
+	dialog = gtk_dialog_new_with_buttons(_("cert_ti_application_trust"),
+                                         GTK_WINDOW(window),
+                                         GTK_DIALOG_DESTROY_WITH_PARENT
+                                         | GTK_DIALOG_NO_SEPARATOR,
 										 NULL);
     hints.min_width  = MIN_WIDTH;
     hints.min_height = MIN_HEIGHT + 100;
     hints.max_width  = MAX_WIDTH;
     hints.max_height = MAX_HEIGHT + 100;
 
-	gtk_window_set_geometry_hints(GTK_WINDOW(*dialog), *dialog, &hints,
+	gtk_window_set_geometry_hints(GTK_WINDOW(dialog), dialog, &hints,
                                   GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
 
     if (*domains && 0 != strcmp("*", (*domains)->data)) {
-        bn_button = gtk_dialog_add_button(GTK_DIALOG(*dialog),
+        bn_button = gtk_dialog_add_button(GTK_DIALOG(dialog),
                                           _("cert_bd_c_delete"),
                                           GTK_RESPONSE_RM_CERTIFICATE);
     }
 
-	bn_button = gtk_dialog_add_button(GTK_DIALOG(*dialog),
+	bn_button = gtk_dialog_add_button(GTK_DIALOG(dialog),
 									  _("cert_bd_trust_settings_ok"),
 									  GTK_RESPONSE_APPLY);
 
@@ -2492,11 +2499,11 @@ ask_domains(gpointer window,
 	gtk_container_add(GTK_CONTAINER(panarea), (GtkWidget*)(selector));
 
 	gtk_widget_set_size_request(GTK_WIDGET(panarea), 0, 0);
-    gtk_container_add(GTK_CONTAINER(GTK_DIALOG(*dialog)->vbox), panarea);
+    gtk_container_add(GTK_CONTAINER(GTK_DIALOG(dialog)->vbox), panarea);
 
-	gtk_widget_show_all(*dialog);
+	gtk_widget_show_all(dialog);
 
-    response = gtk_dialog_run(GTK_DIALOG(*dialog));
+    response = gtk_dialog_run(GTK_DIALOG(dialog));
 	MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, response);
 
     if (*domains) {
@@ -2516,6 +2523,9 @@ ask_domains(gpointer window,
         }
         g_list_free(selected);
     }
+    
+    gtk_widget_hide_all(dialog);
+    gtk_widget_destroy(dialog);
 
 	MAEMOSEC_DEBUG(1, "Exit %s", __func__);
 
@@ -2532,7 +2542,6 @@ certmanui_import_file(gpointer window,
 {
 	STACK_OF(X509) *certs = NULL;
 	EVP_PKEY *pkey = NULL;
-	GtkWidget *dialog = NULL;
 	GList* domains = NULL;
 	const char *confirmation_text;
 	gchar* password = NULL;
@@ -2548,10 +2557,8 @@ certmanui_import_file(gpointer window,
 		/*
 		 * Just a single certificate
 		 */
-		do_install = certmanui_install_certificate_details_dialog
-			(window, sk_X509_value(certs, 0));
-		MAEMOSEC_DEBUG(1, "certmanui_install_certificate_details_dialog=%d", 
-					   do_install);
+		do_install = _certificate_details(window, INSTALL_CERT, 
+                                          sk_X509_value(certs, 0));
 		confirmation_text = "cert_ib_installed_certificate";
 	} else {
 		/* 
@@ -2577,7 +2584,7 @@ certmanui_import_file(gpointer window,
      * Enable all uses by default
      */
     domains = g_list_append(NULL, "*");
-	do_install = ask_domains(window, &dialog, &domains);
+	do_install = ask_domains(window, &domains);
 		
 	if (!do_install) 
 		goto cleanup;
@@ -2643,9 +2650,7 @@ certmanui_import_file(gpointer window,
 		}
 		domains = domains->next;
 	}
-	certmanui_info(NULL, dialog, confirmation_text);
-	gtk_widget_hide_all(dialog);
-	gtk_widget_destroy(dialog);
+	certmanui_info(window, confirmation_text);
 
  cleanup:
 	if (domains)

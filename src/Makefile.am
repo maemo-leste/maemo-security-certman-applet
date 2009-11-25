@@ -1,7 +1,7 @@
 # Makefile.am for CPAs
 
-# These come from configure-script's module dependency checks
 INCLUDES = $(HILDON_CFLAGS) -DLOCALEDIR=\"$(localedir)\" \
+	-DMAEMOSEC_DEBUG_ENABLED \
         $(OSSO_CFLAGS)  -DPREFIX=\"$(prefix)\" -DBIN_DIR=\"$(bindir)\" \
 	$(GCONF_CFLAGS) $(OPENSSL_CFLAGS) $(MAEMOSEC_FLAGS) \
 	$(X_CFLAGS) $(GNOME_VFS_CFLAGS)
@@ -10,6 +10,7 @@ bin_PROGRAMS = maemosec_certman_service
 
 maemosec_certman_service_LDADD = $(OSSO_LIBS) $(HILDON_LIBS) $(GNOME_VFS_LIBS) $(X_LIBS) \
 		   $(MAEMOSEC_LIBS) libmaemosec_certman_dialogs.la
+
 maemosec_certman_service_SOURCES = maemosec_certman_service.c
 
 lib_LTLIBRARIES = libmaemosec_certman_dialogs.la
@@ -25,13 +26,10 @@ libmaemosec_certman_applet_la_LDFLAGS = -module -avoid-version -no-undefined
 
 libmaemosec_certman_applet_la_LIBADD = $(HILDON_LIBS) $(OSSO_LIBS) $(GCONF_LIBS) \
 			 $(OPENSSL_LIBS) $(MAEMOSEC_LIBS) libmaemosec_certman_dialogs.la
+
 LDADD = libmaemosec_certman_dialogs.la
 
-
 include_HEADERS = osso-applet-certman.h
-
-# certmanincludedir = $(includedir)
-# certmaninclude_HEADERS = ui/osso-applet-certman.h
 
 libmaemosec_certman_applet_la_SOURCES =	applet_main.c
 
