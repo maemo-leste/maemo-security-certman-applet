@@ -215,12 +215,12 @@ osso_rpc_cb(const gchar *interface,
 				EVP_PKEY_free(pkey);
 				return(OSSO_OK);
 			} else {
-				MAEMOSEC_ERROR("%s: no password");
+				MAEMOSEC_ERROR("%s: no password", __func__);
 				return(OSSO_ERROR);
 			}
 		} else {
 			cert_name_for_get_privatekey = "";
-			MAEMOSEC_ERROR("%s: invalid key id '%s'", val.value.s);
+			MAEMOSEC_ERROR("%s: invalid key id '%s'", __func__, val.value.s);
 			return(OSSO_ERROR);
 		}
     }
