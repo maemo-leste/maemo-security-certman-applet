@@ -11,8 +11,9 @@ maemo-security-certman-applet (0.1.1) unstable; urgency=low
 
 maemo-security-certman-applet (0.1.0) unstable; urgency=low
 
-  * Made all dialogs non system modal
-      Fixes: NB#127225
+  * Made all dialogs non system modal. Supposed to fix NB#127225, but
+    does not quite: when installation is started from File Manager, 
+    the problem still exists.
   * Change layout to use only one column, with two lines at each item
     and usage code at the second line.
       Fixes: NB#122916
