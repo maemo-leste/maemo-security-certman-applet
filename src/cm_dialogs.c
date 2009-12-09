@@ -1045,6 +1045,7 @@ _certificate_details(gpointer window,
 
     do {
         ret = gtk_dialog_run(GTK_DIALOG(cert_dialog));
+
         MAEMOSEC_DEBUG(1, "%s: gtk_dialog_run returned %d", __func__, ret);
 
         if (GTK_RESPONSE_APPLY == ret) {
@@ -1112,7 +1113,8 @@ _certificate_details(gpointer window,
 				// hildon_banner_show_information (window, NULL, "password changing failed");
 			}
             g_free(new_password);
-		}
+        }
+
     } while (GTK_RESPONSE_DELETE_EVENT != ret);
 
     gtk_widget_hide_all(cert_dialog);
@@ -2545,7 +2547,7 @@ certmanui_import_file(gpointer window,
 	GList* domains = NULL;
 	const char *confirmation_text;
 	gchar* password = NULL;
-	bool do_install;
+	gboolean do_install;
 
 	if (!extract_envelope(window, fileuri, &certs, &pkey, &password)) {
 		if (NULL == password)

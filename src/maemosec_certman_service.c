@@ -75,10 +75,6 @@ osso_context_t *osso_g = NULL;
  */
 gboolean _quit_clean(gpointer pointer);
 
-#define OSSO_CM_SERVICE "com.nokia.certman"
-#define OSSO_CM_INTERFACE "com.nokia.certman"
-#define OSSO_CM_OBJECT_PATH "/com/nokia/certman"
-
 #define DBUS_METHOD_MIME_OPEN       "mime_open"
 #define DBUS_METHOD_TOP_APPLICATION "top_application"
 #define DBUS_METHOD_GET_KEY_PASSWORD "get_key_password"
@@ -238,19 +234,21 @@ osso_rpc_cb(const gchar *interface,
             MAEMOSEC_DEBUG(1, "fileuri came with mime_open request = \"%s\"",
                        fileuri);
 
-			if (!certmanui_import_file(NULL, fileuri, NULL, NULL)) {
-				MAEMOSEC_ERROR("Importing certificate failed");
-				hildon_banner_show_information (top_aux, NULL, _("cert_error_install"));
-				// g_main_loop_quit(mainloop);
-				g_free(fileuri);
-				return(OSSO_ERROR);
-			}
-			MAEMOSEC_DEBUG(1, "Imported");
-
-            g_free(fileuri);
+            if (!certmanui_import_file(GTK_WINDOW(top_aux), fileuri, NULL, NULL)) {
+                MAEMOSEC_ERROR("Importing certificate failed");
+                hildon_banner_show_information (top_aux, NULL, _("cert_error_install"));
+                /*
+                 * Not sure why this is commented away, but don't dare to
+                 * uncomment it right now.
+                 */
+                // g_main_loop_quit(mainloop);
+                g_free(fileuri);
+                return(OSSO_ERROR);
+            }
+            MAEMOSEC_DEBUG(1, "Imported");
             g_main_loop_quit(mainloop);
+            g_free(fileuri);
             /*  gtk_main_quit(); */
-
             retval->type = DBUS_TYPE_BOOLEAN;
             retval->value.b = TRUE;
             return(OSSO_OK);
@@ -273,7 +271,7 @@ osso_init(osso_context_t **osso)
 
     /* Init osso */
     MAEMOSEC_DEBUG(1, "Enter %s", __func__);
-    *osso = osso_initialize("certman", "1.0.29", TRUE, NULL);
+    *osso = osso_initialize("certman", PACKAGE_VERSION, FALSE, NULL);
 
     if (NULL == *osso) {
         MAEMOSEC_ERROR("Osso initialization failed");
@@ -304,7 +302,6 @@ osso_init(osso_context_t **osso)
     if (ret != OSSO_OK) {
         MAEMOSEC_ERROR("Could not set callback for HW monitoring");
     }
-
 	if (!gnome_vfs_init())
         MAEMOSEC_ERROR("%s: gnome_vfs_init returned FALSE", __func__);
 
@@ -326,7 +323,6 @@ gboolean osso_deinit(osso_context_t *osso)
                         "com.nokia.certman",
                         (osso_rpc_cb_f *)osso_rpc_cb,
 						NULL);
-
     osso_hw_unset_event_cb(osso, NULL);
 
     /* Deinit osso */

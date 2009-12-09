@@ -1,11 +1,13 @@
 maemo-security-certman-applet (0.1.1) unstable; urgency=low
 
   * Added missing dependency of libcomapp-dev to the dev package
-      Fixes: NB#
+      Fixes: NB#148361
+  * Do not show an error banner if user cancel certificate installation
+      Fixes: NB#132529
   * Do not show the "install" button when certmanui_install_certificate_details_dialog
     is called from the tablet-browser-ui. 
 
- -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Fri, 27 Nov 2009 19:10:00 +0300
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Wed, 09 Dec 2009 17:10:00 +0300
 
 maemo-security-certman-applet (0.1.0) unstable; urgency=low
 
