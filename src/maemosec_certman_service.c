@@ -132,6 +132,7 @@ gboolean osso_init(osso_context_t **osso);
 
 gboolean osso_deinit(osso_context_t *osso);
 
+void certmanui_info(gpointer window, const char* text);
 
 /* Depending on the state of hw, do something */
 void hw_event_handler(osso_hw_state_t *state, gpointer data)
@@ -172,8 +173,7 @@ osso_rpc_cb(const gchar *interface,
     osso_rpc_t val;
 
 	if (NULL == interface || NULL == method || NULL == args || NULL == retval || 0 == args->len) {
-		hildon_banner_show_information (top_aux, NULL, _("cert_error_install"));
-		// hildon_banner_show_information (GTK_WINDOW(top_aux), NULL, _("cert_error_install"));
+		certmanui_info(NULL, _("cert_error_install"));
 		MAEMOSEC_ERROR("Invalid osso_rpc call, probably not a certificate file");
 		return(OSSO_ERROR);
 	}
@@ -234,14 +234,10 @@ osso_rpc_cb(const gchar *interface,
             MAEMOSEC_DEBUG(1, "fileuri came with mime_open request = \"%s\"",
                        fileuri);
 
-            if (!certmanui_import_file(GTK_WINDOW(top_aux), fileuri, NULL, NULL)) {
+            if (!certmanui_import_file(NULL, fileuri, NULL, NULL)) {
                 MAEMOSEC_ERROR("Importing certificate failed");
-                hildon_banner_show_information (top_aux, NULL, _("cert_error_install"));
-                /*
-                 * Not sure why this is commented away, but don't dare to
-                 * uncomment it right now.
-                 */
-                // g_main_loop_quit(mainloop);
+                certmanui_info(NULL, _("cert_error_install"));
+                g_main_loop_quit(mainloop);
                 g_free(fileuri);
                 return(OSSO_ERROR);
             }

@@ -357,10 +357,13 @@ extract_envelope(gpointer window,
 		*/
 		if (test_pkcs12_password(idata, ""))
 			*password = g_strdup("");
-		else
+		else {
 			*password = (gchar*)ask_password(window, FALSE, 
                                              test_pkcs12_password, 
                                              idata, shortname);
+            if (NULL == *password)
+                *password = g_strdup("");
+        }
 
 		rc = PKCS12_parse((PKCS12*)idata, *password, pkey, &cert, &cas);
 		MAEMOSEC_DEBUG(1, "parse PKCS12 returned %d", rc);
@@ -384,8 +387,9 @@ extract_envelope(gpointer window,
 			}
 			sk_X509_free(cas);
 			result = (0 < sk_X509_num(*certs));
-		} else
+		} else {
 			result = FALSE;
+        }
 
 	} else if (0 == strcmp(filetype, "X509-PEM")
 		   ||  0 == strcmp(filetype, "X509-DER")) 

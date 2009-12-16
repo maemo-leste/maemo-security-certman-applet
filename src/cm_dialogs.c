@@ -1695,7 +1695,7 @@ timeout_close_dialog(gpointer* the_dialog)
 }
 
 
-static void
+void
 certmanui_info(gpointer window, const char* text)
 {
     MAEMOSEC_DEBUG(1, "%s: banner on %p", __func__, window);
@@ -2121,12 +2121,12 @@ cert_list_row_activated(GtkTreeView* tree,
              */
             certmanui_info(window, "cert_ib_uninstalled");
             MAEMOSEC_DEBUG(1, "%s: certificate %s deleted", __func__, cert_id);
-            if (gtk_list_store_remove(list_store, &iter)) {
-                MAEMOSEC_DEBUG(1, "%s: gtk_list_store_remove returned TRUE", __func__);
-                gtk_tree_model_row_deleted(model, path);
-                break;
-            } else
-                MAEMOSEC_DEBUG(1, "gtk_list_store_remove returned FALSE");
+            /*
+             * Renew the whole list to make also the unused titles disappear. NB#119177
+             */
+            gtk_list_store_clear(list_store);
+            _populate_all_certificates(list_store);
+            break;
 
         } else {
             /*
@@ -2550,9 +2550,16 @@ certmanui_import_file(gpointer window,
 	gboolean do_install;
 
 	if (!extract_envelope(window, fileuri, &certs, &pkey, &password)) {
-		if (NULL == password)
+		if (NULL == password) {
 			MAEMOSEC_ERROR("Invalid certificate file '%s'", fileuri);
-		return(FALSE);
+            return(FALSE);
+        } else {
+            /*
+             * Not failed, just canceled. Do not show error message.
+             */
+            g_free(password);
+            return(TRUE);
+        }
 	}
 
 	if (NULL == pkey && 1 == sk_X509_num(certs)) {
@@ -2655,6 +2662,8 @@ certmanui_import_file(gpointer window,
 	certmanui_info(window, confirmation_text);
 
  cleanup:
+    if (password)
+        g_free(password);
 	if (domains)
 		g_list_free(domains);
 	if (pkey)

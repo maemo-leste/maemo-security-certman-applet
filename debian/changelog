@@ -1,3 +1,11 @@
+maemo-security-certman-applet (0.1.2) unstable; urgency=low
+	
+  * Do not show an error banner if user cancels certificate installation
+    in the enter password dialog.
+      Fixes: NB#132529
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Wed, 16 Dec 2009 17:10:00 +0300
+
 maemo-security-certman-applet (0.1.1) unstable; urgency=low
 
   * Added missing dependency of libcomapp-dev to the dev package
