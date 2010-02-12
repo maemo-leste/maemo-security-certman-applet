@@ -132,8 +132,6 @@ gboolean osso_init(osso_context_t **osso);
 
 gboolean osso_deinit(osso_context_t *osso);
 
-void certmanui_info(gpointer window, const char* text);
-
 /* Depending on the state of hw, do something */
 void hw_event_handler(osso_hw_state_t *state, gpointer data)
 {

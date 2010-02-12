@@ -120,6 +120,7 @@ struct sortname_info {
 
 struct populate_context {
 	int domain_flags;
+    int is_user_cert;
 	const char* domain_name;
 	GtkListStore *store;
 	GtkTreeIter* iter;
@@ -451,6 +452,7 @@ _populate_all_certificates(GtkListStore* cert_list_store)
 	pc.store = cert_list_store;
     pc.iter = &iter;
 	pc.domain_flags = MAEMOSEC_CERTMAN_DOMAIN_PRIVATE;
+    pc.is_user_cert = 1;
     pc.domain_name = NULL;
     pc.search_tree = NULL;
 
@@ -470,6 +472,7 @@ _populate_all_certificates(GtkListStore* cert_list_store)
 	}
 
 	MAEMOSEC_DEBUG(1, "Populate user modifiable CA certificates");
+    pc.is_user_cert = 0;
 
     /*
      * Let's assume that there always is some CA certificates
@@ -582,8 +585,10 @@ add_to_str_arr(unsigned char* namepart, void* data)
     gchar** str_arr = (gchar**) data;
     int i;
     for (i = 0; NULL != str_arr[i] && STR_ARR_END_MARK != str_arr[i]; i++);
-    if (STR_ARR_END_MARK != str_arr[i])
+    if (STR_ARR_END_MARK != str_arr[i]) {
+        MAEMOSEC_DEBUG(1, "%s: %d => %s", __func__, i, namepart);
         str_arr[i] = g_strdup((char*)namepart);
+    }
 }
 
 
@@ -638,19 +643,19 @@ _cert_item_label(gboolean is_valid, gchar* nickname, gchar* usages)
     gchar *res;
 
     if (is_valid) {
-        res = g_strdup_printf("<markup><b>%s</b>\n<small>%s %s</small></markup>", 
-                              nickname,
-                              _("cert_ti_main_notebook_validfor"),
-                              usages);
+        res = g_markup_printf_escaped("<markup><b>%s</b>\n<small>%s %s</small></markup>", 
+                                      nickname,
+                                      _("cert_ti_main_notebook_validfor"),
+                                      usages);
     } else {
         gchar *emesg = g_strdup(_("cert_nc_expired"));
         gchar *c = strchr(emesg, '\n');
         if (c)
             *c = '\0';
-        res = g_strdup_printf("<markup><b>%s</b>\n<small><span color=\"red\">"
-                              "%s</span></small></markup>", 
-                              nickname,
-                              emesg);
+        res = g_markup_printf_escaped("<markup><b>%s</b>\n<small><span color=\"red\">"
+                                      "%s</span></small></markup>", 
+                                      nickname,
+                                      emesg);
         g_free(emesg);
     }
     return res;
@@ -660,19 +665,21 @@ _cert_item_label(gboolean is_valid, gchar* nickname, gchar* usages)
 static void
 _copy_search_tree(struct cert_info* from_tree, struct populate_context *to_ctx)
 {
+    gchar* item_label = _cert_item_label(from_tree->is_valid, 
+                                         from_tree->nickname, 
+                                         from_tree->usage);
 	if (from_tree->left)
 		_copy_search_tree(from_tree->left, to_ctx);
 
 	MAEMOSEC_DEBUG(1, "%s", from_tree->nickname);
 	gtk_list_store_append(to_ctx->store, to_ctx->iter);
 	gtk_list_store_set(to_ctx->store, to_ctx->iter, 
-					   MAIN_NAME_COL, _cert_item_label
-                       (from_tree->is_valid, from_tree->nickname, from_tree->usage),
+					   MAIN_NAME_COL, item_label,
 					   MAIN_ID_COL, from_tree->key_str,
 					   MAIN_DOMAIN_COL, from_tree->domain_name,
 					   MAIN_DOM_TYPE_COL, to_ctx->domain_flags,
 					   -1);
-
+    g_free(item_label);
 	if (from_tree->right)
 		_copy_search_tree(from_tree->right, to_ctx);
 }
@@ -702,23 +709,29 @@ fill_cert_data(int pos, X509* cert, void* info)
 	char key_str[MAEMOSEC_KEY_ID_STR_LEN] = "";
 	struct cert_info *cis, *add_point;
 	struct sortname_info sif;
+    gchar* cert_name;
 	int rc;
 	char* c;
 
 	MAEMOSEC_DEBUG(1, "Enter %d:%p:%p", pos, cert, info);
 
-	rc = maemosec_certman_get_nickname(cert, namebuf, sizeof(namebuf));
+    if (pc->is_user_cert) {
+        cert_name = get_user_cert_name(cert);
+    } else {
+        rc = maemosec_certman_get_nickname(cert, namebuf, sizeof(namebuf));
+        cert_name = g_strdup(namebuf);
+    }
 	rc = maemosec_certman_get_key_id(cert, key_id);
 	rc = maemosec_certman_key_id_to_str(key_id, key_str, sizeof(key_str));
 
 	MAEMOSEC_DEBUG(3, "Add '%s:%s:%s:%s'", 
 				   MAEMOSEC_CERTMAN_DOMAIN_SHARED==pc->domain_flags?"shared":"private",
-				   pc->domain_name, namebuf, key_str);
+				   pc->domain_name, cert_name, key_str);
 
 	cis = malloc(sizeof(struct cert_info));
 	memset(cis, '\0', sizeof(struct cert_info));
     cis->domain_name = g_strdup(pc->domain_name);
-	cis->nickname = g_strdup(namebuf);
+	cis->nickname = cert_name;
 #if 0
     if (MAX_TITLE_NAME_LEN < strlen(cis->nickname)) {
         char* sep = cis->nickname + MAX_TITLE_NAME_LEN;
@@ -1929,7 +1942,6 @@ cert_list_row_activated(GtkTreeView* tree,
     GtkTreeModel *model = gtk_tree_view_get_model(tree);
     GtkWidget *window = NULL;
 	GtkListStore *list_store = (GtkListStore*) user_data;
-	gchar *name_str = NULL;
     gchar *cert_id  = NULL;
 	gchar *domain   = NULL;
     GList* domains = NULL;
@@ -1951,7 +1963,6 @@ cert_list_row_activated(GtkTreeView* tree,
 
     /* Get certificate ID */
     gtk_tree_model_get(model, &iter, 
-					   MAIN_NAME_COL, &name_str, 
 					   MAIN_ID_COL, &cert_id, 
 					   MAIN_DOMAIN_COL, &domain,
 					   MAIN_DOM_TYPE_COL, &domain_flags,
@@ -1972,9 +1983,9 @@ cert_list_row_activated(GtkTreeView* tree,
          */
         gchar* first_domain = g_list_nth_data(domains, 0);
 
-		MAEMOSEC_DEBUG(1, "%s: fetch %s:%s:%s:%s", __func__, 
+		MAEMOSEC_DEBUG(1, "%s: fetch %s:%s:%s", __func__, 
 					   MAEMOSEC_CERTMAN_DOMAIN_SHARED==domain_flags?"shared":"private",
-					   first_domain, cert_id, name_str);
+					   first_domain, cert_id);
 
 		rc = maemosec_certman_open_domain(first_domain, domain_flags, &dh);
 		if (0 != rc) {
@@ -2136,7 +2147,12 @@ cert_list_row_activated(GtkTreeView* tree,
             gchar *new_domains_str, *new_usage_str;
             GList *new_usages = NULL;
             char cert_name [NAMEBUF_LEN];
+            gchar* item_label;
 	
+            /*
+             * TODO: Use the same algorithm as elsewhere, name 
+             * is not always the nickname
+             */
             maemosec_certman_get_nickname(cert, cert_name, sizeof(cert_name));
 
             _join(domains, ",", &new_domains_str);
@@ -2146,16 +2162,17 @@ cert_list_row_activated(GtkTreeView* tree,
             _join(new_usages, ", ", &new_usage_str);
 
             MAEMOSEC_DEBUG(1, "%s: %s new usage %s", __func__, cert_name, new_usage_str);
+            item_label = _cert_item_label(TRUE, cert_name, new_usage_str);
 
             gtk_list_store_set(list_store, &iter, 
-                               MAIN_NAME_COL, 
-                               _cert_item_label(TRUE, cert_name, new_usage_str),
+                               MAIN_NAME_COL, item_label,
                                MAIN_DOMAIN_COL, new_domains_str,
                                -1);
 
             gtk_tree_model_row_changed(model, path, &iter);
             g_list_free(new_usages);
             g_free(new_usage_str);
+            g_free(item_label);
         }
 
         g_list_free(remove_from);
@@ -2177,8 +2194,6 @@ cert_list_row_activated(GtkTreeView* tree,
 		X509_free(cert);
 	if (b64_cert)
 		g_free(b64_cert);
-	if (name_str)
-		g_free(name_str);
 	if (cert_id)
 		g_free(cert_id);
 	return;
@@ -2328,36 +2343,56 @@ certmanui_install_certificates_dialog(gpointer window,
 	for (i = 0; i < sk_X509_num(certs); i++) {
 
 		X509* cert = sk_X509_value(certs, i);
-		unsigned char* cder;
-		char* b64cert;
+		unsigned char* cder = NULL;
+		char* b64cert = NULL;
 		maemosec_key_id key_id;
-		char key_id_str [MAEMOSEC_KEY_ID_STR_LEN];
-		int len;
+        gchar* cert_name = NULL;
+        gchar* escaped_name = NULL;
+		char key_id_str [MAEMOSEC_KEY_ID_STR_LEN] = "";
+		int len = 0;
+        int self_signed = 0;
+        int openssl_error = 0;
+		
+        check_certificate(cert, &self_signed, &openssl_error);
+        if (0 != openssl_error && X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY != openssl_error) {
+            if (0 == g_openssl_error)
+                g_openssl_error = openssl_error;
+            MAEMOSEC_ERROR("%s: '%s' : %s", __func__, namebuf, 
+                           X509_verify_cert_error_string(openssl_error));
+        }
 
-		rc = maemosec_certman_get_nickname(cert, namebuf, sizeof(namebuf));
-		MAEMOSEC_DEBUG(1, "Certificate '%s' (%d)", namebuf, rc);
-		if (0 != rc) {
-			MAEMOSEC_ERROR("Failed to get nickname");
-			continue;
-		}
+        /*
+         * TODO: Make this an own function.
+         */
+        if (X509_check_ca(cert)) {
+            cert_type = "cert_li_certificate_signing";
+            rc = maemosec_certman_get_nickname(cert, namebuf, sizeof(namebuf));
+            MAEMOSEC_DEBUG(1, "CA certificate '%s' (%d)", namebuf, rc);
+            if (0 != rc) {
+                MAEMOSEC_ERROR("Failed to get nickname");
+                continue;
+            }
+            cert_name = g_strdup(namebuf);
+        } else if (NULL != pkey) {
+            cert_type = "cert_li_certificate_user";
+            cert_name = get_user_cert_name(cert);
+            MAEMOSEC_DEBUG(1, "Client certificate '%s'", cert_name);
+        } else {
+            // Not supported yet
+            cert_type = "cert_li_certificate_server";
+            MAEMOSEC_DEBUG(1, "Server certificate '%s', skip", cert_name);
+            continue;
+        }
+        escaped_name = g_markup_escape_text(cert_name, -1);
 
-		{
-			int self_signed;
-			int openssl_error = 0;
-			check_certificate(cert, &self_signed, &openssl_error);
-			if (0 != openssl_error) {
-				if (0 == g_openssl_error)
-					g_openssl_error = openssl_error;
-				MAEMOSEC_ERROR("%s: '%s' : %s", __func__, namebuf, 
-							   X509_verify_cert_error_string(openssl_error));
-			}
-		}
+		if (0 == maemosec_certman_get_key_id(cert, key_id))
+			rc = maemosec_certman_key_id_to_str(key_id, key_id_str, sizeof(key_id_str));
 
 		cder = NULL;
 		len = i2d_X509(cert, &cder);
 		
 		if (0 > len || NULL == cder) {
-			MAEMOSEC_ERROR("Failed to convert '%s' to DER", namebuf);
+			MAEMOSEC_ERROR("Failed to convert '%s' to DER", cert_name);
 			continue;
 		}
 
@@ -2366,28 +2401,15 @@ certmanui_install_certificates_dialog(gpointer window,
 
 		gtk_list_store_append(contents_store, &iter);
 		gtk_list_store_set(contents_store, &iter, 
+                           MAIN_NAME_COL, escaped_name,
 						   MAIN_CONTENT_COL, b64cert, 
 						   MAIN_DOM_TYPE_COL, INSTALL_CERT + 1,
+                           MAIN_ID_COL, key_id_str,
 						   -1);
 
-		if (   0 == maemosec_certman_get_key_id(cert, key_id)
-			&& 0 == maemosec_certman_key_id_to_str(key_id, key_id_str, sizeof(key_id_str)))
-				gtk_list_store_set(contents_store, &iter, MAIN_ID_COL, key_id_str, -1);
-
-        /*
-         * TODO: The certificate type is not shown at all
-         */
-        if (X509_check_ca(cert)) {
-            cert_type = "cert_li_certificate_signing";
-        } else if (NULL != pkey) {
-            cert_type = "cert_li_certificate_user";
-        } else {
-            cert_type = "cert_li_certificate_user";
-        }
-        gtk_list_store_set(contents_store, &iter, 
-						   MAIN_NAME_COL, namebuf,
-						   -1);
-		free(b64cert);
+        free(b64cert);
+        g_free(escaped_name);
+        g_free(cert_name);
 		OPENSSL_free(cder);
 	}
 	
