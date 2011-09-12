@@ -1,12 +1,18 @@
+maemo-security-certman-applet (0.1.4) unstable; urgency=low
+
+  Mark blacklisted certificates invalid
+
+ -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Mon, 12 Sep 2011 10:06:12 +0300
+
 maemo-security-certman-applet (0.1.3) unstable; urgency=low
-	
+
   * Handle properly certificate names with markup characters in them
       Fixes: NB#122916
 
  -- Juhani Mäkelä <ext-juhani.3.makela@nokia.com>  Wed, 17 Feb 2010 18:00:00 +0300
 
 maemo-security-certman-applet (0.1.2) unstable; urgency=low
-	
+
   * Do not show an error banner if user cancels certificate installation
     in the enter password dialog.
       Fixes: NB#132529

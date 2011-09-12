@@ -744,13 +744,17 @@ fill_cert_data(int pos, X509* cert, void* info)
             *sep = '\0';
     }
 #endif
-    if (MAEMOSEC_CERTMAN_DOMAIN_SHARED == pc->domain_flags)
-        cis->usage = g_strdup(_("cert_ti_main_notebook_allusers"));
-    else {
-        cis->usage = g_strdup(get_purpose_name(pc->domain_name));
-    }
+	if (0 == strcmp(pc->domain_name, "blacklist")) {
+		 cis->is_valid = 0;
+    } else {    
+		if (MAEMOSEC_CERTMAN_DOMAIN_SHARED == pc->domain_flags) {
+			cis->usage = g_strdup(_("cert_ti_main_notebook_allusers"));
+		} else {
+			cis->usage = g_strdup(get_purpose_name(pc->domain_name));
+		}
+		cis->is_valid = (0 == X509_check_cert_time(cert));
+	}
 	cis->key_str  = g_strdup(key_str);
-    cis->is_valid = (0 == X509_check_cert_time(cert));
 
 	sif.buf = namebuf;
 	namebuf[0] = '\0';
