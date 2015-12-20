@@ -1,5 +1,5 @@
 Source: maemo-security-certman-applet
-Section: user/other
+Section: x11
 Priority: extra
 Maintainer: Pali Rohár <pali.rohar@gmail.com>
 Build-Depends-Indep: gettext
