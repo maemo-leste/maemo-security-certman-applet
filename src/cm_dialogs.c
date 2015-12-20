@@ -2256,7 +2256,7 @@ ask_password(gpointer window,
 {
 	HildonGetPasswordDialog* password_dialog = NULL;
 	gint response = 0;
-	const gchar *result;
+	const gchar *result = NULL;
 
     /*
      * Use generic hildon_get_password_dialog.
