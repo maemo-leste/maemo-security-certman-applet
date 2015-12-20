@@ -1588,7 +1588,7 @@ certmanui_get_privatekey(gpointer window,
 						 gpointer user_data)
 {
 	char key_id_str [MAEMOSEC_KEY_ID_STR_LEN];
-    const gchar* pwd = g_strdup(DEFAULT_PASSWORD);
+    const gchar* pwd;
     struct pkey_passwd pwd_param;
     gchar* info = NULL;
 
@@ -1597,15 +1597,27 @@ certmanui_get_privatekey(gpointer window,
 
     memcpy(pwd_param.key_id, cert_id, MAEMOSEC_KEY_ID_LEN);
     pwd_param.pkey = NULL;
+
+    pwd = g_strdup(DEFAULT_PASSWORD);
     if (test_pkey_password(&pwd_param, pwd)) {
-        MAEMOSEC_DEBUG(1, "%s: No password %s", __func__, key_id_str);
+        MAEMOSEC_DEBUG(1, "%s: Default password %s", __func__, key_id_str);
         if (password)
             *password = g_strdup(pwd);
         if (callback)
             callback(cert_id, pwd_param.pkey, (gchar*)pwd, user_data);
         return(pwd_param.pkey);
     }
+    g_free((gchar*)pwd);
 
+    pwd = g_strdup("");
+    if (test_pkey_password(&pwd_param, pwd)) {
+        MAEMOSEC_DEBUG(1, "%s: Empty password %s", __func__, key_id_str);
+        if (password)
+            *password = g_strdup(pwd);
+        if (callback)
+            callback(cert_id, pwd_param.pkey, (gchar*)pwd, user_data);
+        return(pwd_param.pkey);
+    }
     g_free((gchar*)pwd);
 
     if (NULL == cert_name_for_get_privatekey 
