@@ -1,3 +1,11 @@
+maemo-security-certman-applet (0.1.5) unstable; urgency=low
+
+  * Allow to use private keys without passwords
+  * Do not ask for password when connecting to EAP-TLS wifi when private key does
+    not have any password, fixes bug: https://bugs.maemo.org/show_bug.cgi?id=1574
+
+ -- Pali Rohár <pali.rohar@gmail.com>  Sun, 20 Dec 2015 11:52:18 +0100
+
 maemo-security-certman-applet (0.1.4) unstable; urgency=low
 
   Release 0.1.4
