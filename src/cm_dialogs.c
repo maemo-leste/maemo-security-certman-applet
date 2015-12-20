@@ -2645,7 +2645,7 @@ certmanui_import_file(gpointer window,
 					rc = maemosec_certman_get_key_id(cert, key_id);
 					if (0 == rc) {
 						rc = maemosec_certman_store_key(key_id, pkey, 
-                                                        password?password:DEFAULT_PASSWORD);
+                                                        (password&&password[0])?password:DEFAULT_PASSWORD);
 						if (0 == rc)
 							MAEMOSEC_DEBUG(1, "Stored private key");
 						else
