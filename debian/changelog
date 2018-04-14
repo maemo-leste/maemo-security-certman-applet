@@ -1,3 +1,9 @@
+maemo-security-certman-applet (0.2.0) unstable; urgency=low
+
+  * Use maemo-least maemo-security-certman-applet (OpenSSL 1.1.0)
+
+ -- Merlijn Wajer <merlijn@wizzup.org>  Sat, 14 Apr 2018 21:00:00 +0100
+
 maemo-security-certman-applet (0.1.5) unstable; urgency=low
 
   * Allow to use private keys without passwords
