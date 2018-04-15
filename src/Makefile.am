@@ -8,7 +8,7 @@ INCLUDES = $(HILDON_CFLAGS) -DLOCALEDIR=\"$(localedir)\" \
 bin_PROGRAMS = maemosec_certman_service
 
 maemosec_certman_service_LDADD = $(OSSO_LIBS) $(HILDON_LIBS) $(GNOME_VFS_LIBS) $(X_LIBS) \
-		   $(MAEMOSEC_LIBS) libmaemosec_certman_dialogs.la
+		   $(MAEMOSEC_LIBS) $(X11_LIBS) libmaemosec_certman_dialogs.la
 
 maemosec_certman_service_SOURCES = maemosec_certman_service.c
 
@@ -17,14 +17,14 @@ lib_LTLIBRARIES = libmaemosec_certman_dialogs.la
 libmaemosec_certman_dialogs_la_LDFLAGS = -module -no-undefined -version-info $(LIBRARY_VERSION)
 
 libmaemosec_certman_dialogs_la_LIBADD = $(HILDON_LIBS) $(OSSO_LIBS) $(GCONF_LIBS) \
-			 $(OPENSSL_LIBS) $(MAEMOSEC_LIBS) $(GNOME_VFS_LIBS) $(X_LIBS)
+			 $(OPENSSL_LIBS) $(MAEMOSEC_LIBS) $(GNOME_VFS_LIBS) $(X_LIBS) $(X11_LIBS)
 
 hildonpluginlib_LTLIBRARIES = libmaemosec_certman_applet.la
 
 libmaemosec_certman_applet_la_LDFLAGS = -module -avoid-version -no-undefined 
 
 libmaemosec_certman_applet_la_LIBADD = $(HILDON_LIBS) $(OSSO_LIBS) $(GCONF_LIBS) \
-			 $(OPENSSL_LIBS) $(MAEMOSEC_LIBS) libmaemosec_certman_dialogs.la
+			 $(OPENSSL_LIBS) $(MAEMOSEC_LIBS) $(X11_LIBS) libmaemosec_certman_dialogs.la
 
 LDADD = libmaemosec_certman_dialogs.la
 

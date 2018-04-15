@@ -36,6 +36,10 @@ CFLAGS="$CFLAGS -Wall -Wno-format-y2k -ansi -Wmissing-prototypes \
 -Wmissing-declarations -std=c99 -DDEBUG -D_REENTRANT"
 
 AC_SUBST(CFLAGS)
+
+PKG_CHECK_MODULES(X11, x11)
+AC_SUBST(X11_LIBS)
+AC_SUBST(X11_CFLAGS)
                                                                                 
 PKG_CHECK_MODULES(GTK, gtk+-2.0 >= 2.4.0)
 AC_SUBST(GTK_LIBS)
