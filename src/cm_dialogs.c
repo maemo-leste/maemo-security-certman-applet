@@ -40,6 +40,7 @@
 #endif
 
 #include <openssl/pem.h>
+#include <openssl/evp.h>
 #include <openssl/x509v3.h>
 #include <openssl/err.h>
 #include <maemosec_common.h>
@@ -1399,10 +1400,10 @@ check_certificate(X509 *cert, int *self_signed, int *openssl_error)
 	if (0 < X509_verify_cert(csc)) {
 		*self_signed = 1;
 	} else {
-		*openssl_error = csc->error;
+		*openssl_error = X509_STORE_CTX_get_error(csc);
 		MAEMOSEC_DEBUG(1, "Verification fails: %s", 
-					   X509_verify_cert_error_string(csc->error));
-		if (X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY == csc->error) {
+					   X509_verify_cert_error_string(*openssl_error));
+		if (X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY == *openssl_error) {
 			/*
 			 * TODO: Is there a possibility that this would mask
 			 * other errors. X509_check_cert_time returns 0 if
