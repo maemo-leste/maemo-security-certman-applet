@@ -34,19 +34,17 @@
 #define __HILDON_REMOTE_TEXTURE_H__
 #include <hildon/hildon.h>
 
-typedef enum {AUTH_USER, AUTH_ROOT} AuthType;
+typedef enum { AUTH_USER, AUTH_ROOT } AuthType;
 
-GtkWidget* 
-ui_create_main_dialog(gpointer window) ;
+GtkWidget *ui_create_main_dialog(gpointer window);
 
-const gchar* ask_password(gpointer window, 
-                          gboolean object_is_cert,
-                          int test_password(void* data, const gchar* pwd), 
-                          void* data, 
-                          const char* info);
+const gchar *ask_password(gpointer window,
+			  gboolean object_is_cert,
+			  int test_password(void *data, const gchar * pwd),
+			  void *data, const char *info);
 
-int report_openssl_error(const char* str, size_t len, void* u);
+int report_openssl_error(const char *str, size_t len, void *u);
 
-void certmanui_info(gpointer window, const char* text);
+void certmanui_info(gpointer window, const char *text);
 
 #endif

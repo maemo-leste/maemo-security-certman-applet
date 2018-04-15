@@ -32,16 +32,13 @@
 #include <gtk/gtk.h>
 
 typedef enum {
-    FORMAT_UNDEFINED, FORMAT_PEM, FORMAT_DER, FORMAT_P12
+	FORMAT_UNDEFINED, FORMAT_PEM, FORMAT_DER, FORMAT_P12
 } FileFormat;
 
-const char*
-determine_filetype(FILE* fp, void** idata);
+const char *determine_filetype(FILE * fp, void **idata);
 
 gboolean
 extract_envelope(gpointer window,
-		 const char* fileuri,
-		 STACK_OF(X509) **certs,
-		 EVP_PKEY **pkey,
-		 gchar** password);
+		 const char *fileuri,
+		 STACK_OF(X509) ** certs, EVP_PKEY ** pkey, gchar ** password);
 #endif

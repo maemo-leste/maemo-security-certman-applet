@@ -48,21 +48,20 @@
 extern "C" {
 #endif
 
-    typedef enum {
-        CERTMANUI_EXPIRED_DIALOG_EXPIRED,
-        CERTMANUI_EXPIRED_DIALOG_NOCA,
-        CERTMANUI_EXPIRED_DIALOG_NOCA_EXPIRED
-    } CertmanUIExpiredDialogType;
+	typedef enum {
+		CERTMANUI_EXPIRED_DIALOG_EXPIRED,
+		CERTMANUI_EXPIRED_DIALOG_NOCA,
+		CERTMANUI_EXPIRED_DIALOG_NOCA_EXPIRED
+	} CertmanUIExpiredDialogType;
 
+	typedef enum {
+		CERTMANUI_ERROR_NO_LONGER_TRUSTED,
+		CERTMANUI_ERROR_NOT_VALID_SERVER_CERT,
+		CERTMANUI_ERROR_NOT_VALID_USER_CERT,
+		CERTMANUI_ERROR_UNABLE_TO_SAVE,
+	} CertmanUIErrorType;
 
-    typedef enum {
-        CERTMANUI_ERROR_NO_LONGER_TRUSTED,
-        CERTMANUI_ERROR_NOT_VALID_SERVER_CERT,
-        CERTMANUI_ERROR_NOT_VALID_USER_CERT,
-        CERTMANUI_ERROR_UNABLE_TO_SAVE,
-    } CertmanUIErrorType;
-
-	gboolean certmanui_init(osso_context_t *osso_ext);
+	gboolean certmanui_init(osso_context_t * osso_ext);
 
 	gboolean certmanui_deinit(void);
 
@@ -75,10 +74,10 @@ extern "C" {
                         include delete or change password buttons.
    @param certificate   Certificate, whose details are shown.
 */
-    gboolean
-	certmanui_certificate_details_dialog(gpointer window,
-										 int domain_flags,
-										 X509* certificate);
+	 gboolean
+	    certmanui_certificate_details_dialog(gpointer window,
+						 int domain_flags,
+						 X509 * certificate);
 
 /**
    Imports a certificate from a given file.Certificate is added to
@@ -97,11 +96,11 @@ extern "C" {
 
    @return TRUE, if importing was succesful.
 */
-    gboolean 
-	certmanui_import_file(gpointer window,
-						  const gchar* fileuri,
-						  maemosec_key_id* cert_id, 
-						  GSList **pk12_list);
+	 gboolean
+	    certmanui_import_file(gpointer window,
+				  const gchar * fileuri,
+				  maemosec_key_id * cert_id,
+				  GSList ** pk12_list);
 
 /**
    Show a details dialog for unknown certificate (not in the store).
@@ -114,9 +113,9 @@ extern "C" {
    @return TRUE, if user decided to install the certificate and the
    installation was succesful.
 */
-    gboolean 
-	certmanui_install_certificate_details_dialog(gpointer window,
-												 X509* cert);
+	 gboolean
+	    certmanui_install_certificate_details_dialog(gpointer window,
+							 X509 * cert);
 
 /**
    Represent UI for deleting the given certificate.
@@ -126,9 +125,9 @@ extern "C" {
 
    @return TRUE, if certificate was deleted succesfully.
 */
-    gboolean 
-	certmanui_delete_certificate(gpointer window, 
-								 maemosec_key_id cert_id);
+	 gboolean
+	    certmanui_delete_certificate(gpointer window,
+					 maemosec_key_id cert_id);
 
 /**
    Callback function for the certmanui_get_privatekey, if it is
@@ -143,12 +142,11 @@ extern "C" {
    dupped, if used outside this callback. May be NULL.
    @param user_data     User data given to certmanui_get_privatekey.
 */
-    typedef void 
-	(*PrivateKeyResponseFunc) (maemosec_key_id cert_id,
-							   EVP_PKEY* key,
-							   gchar* password,
-							   gpointer user_data);
-	
+	typedef void
+	 (*PrivateKeyResponseFunc) (maemosec_key_id cert_id,
+				    EVP_PKEY * key,
+				    gchar * password, gpointer user_data);
+
 /**
    Callback function for the certman_certificate_expired, if it is
    non-blocking.
@@ -156,9 +154,9 @@ extern "C" {
    @param expired       The status of expiration. TRUE => expired.
    @param user_data      User data given to certmanui_certificate_expired.
 */
-    typedef void 
-	(*CertificateExpiredResponseFunc) (gboolean expired,
-									   gpointer user_data);
+	typedef void
+	 (*CertificateExpiredResponseFunc) (gboolean expired,
+					    gpointer user_data);
 
 /**
    Show UI for getting the given private key. The function can be
@@ -183,19 +181,20 @@ extern "C" {
 	 * Set this to point to the certificate name if you want it visible
 	 * in the password query.
 	 */
-	extern gchar* cert_name_for_get_privatekey;
+	extern gchar *cert_name_for_get_privatekey;
 
-    EVP_PKEY* certmanui_get_privatekey(gpointer window, maemosec_key_id cert_id,
-                                       gchar** password,
-                                       PrivateKeyResponseFunc callback,
-                                       gpointer user_data);
+	EVP_PKEY *certmanui_get_privatekey(gpointer window,
+					   maemosec_key_id cert_id,
+					   gchar ** password,
+					   PrivateKeyResponseFunc callback,
+					   gpointer user_data);
 
 /**
    Cancels the UI for getting the private key. Use for cancelling a
    non-blocking private key password query. Registered callback is
    called as it is called in CANCEL-case.
 */
-    void certmanui_cancel_privatekey(void);
+	void certmanui_cancel_privatekey(void);
 
 /**
    Convenience function (version of certmanui_certificate_with_type())
@@ -216,12 +215,14 @@ extern "C" {
    TRUE, if called as non-blocking.
 
 */
-    gboolean 
-	certmanui_certificate_expired_with_name(gpointer window,
-											CertmanUIExpiredDialogType type,
-											const gchar* cert_name,
-											CertificateExpiredResponseFunc callback,
-											gpointer user_data);
+	 gboolean
+	    certmanui_certificate_expired_with_name(gpointer window,
+						    CertmanUIExpiredDialogType
+						    type,
+						    const gchar * cert_name,
+						    CertificateExpiredResponseFunc
+						    callback,
+						    gpointer user_data);
 /**     
     Convenience function (version of certmanui_certificate_with_type())
 	for server certificates (not stored in the certificate storage).
@@ -244,15 +245,15 @@ extern "C" {
 	@return TRUE, if error could be shown succesfully, FALSE otherwise.
 	Returns always TRUE, if called as non-blocking.
 */
-    gboolean 
-	certmanui_show_error_with_name_and_serial(gpointer window,
-											  CertmanUIErrorType type,
-											  const gchar* cert_name,
-											  const gchar* cert_serial,
-											  gpointer param,
-											  CertificateExpiredResponseFunc callback,
-											  gpointer user_data);
-
+	 gboolean
+	    certmanui_show_error_with_name_and_serial(gpointer window,
+						      CertmanUIErrorType type,
+						      const gchar * cert_name,
+						      const gchar * cert_serial,
+						      gpointer param,
+						      CertificateExpiredResponseFunc
+						      callback,
+						      gpointer user_data);
 
 #ifdef __cplusplus
 }
