@@ -35,7 +35,9 @@
 
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
+#ifdef HAVE_COMAPP
 #include <libcomapp/comapp_opensave.h>
+#endif
 
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
@@ -2219,6 +2221,7 @@ cert_list_row_activated(GtkTreeView* tree,
 static void
 _import_certificate(GtkAction *action, struct import_context *ctx)
 {        
+#ifdef HAVE_COMAPP
     ComappOpenSave opensave_data;
     comapp_fc_result select_result;
     gchar *filename = NULL;
@@ -2242,6 +2245,9 @@ _import_certificate(GtkAction *action, struct import_context *ctx)
         }
     }
     g_free(opensave_data.result_uri);
+#else
+    MAEMOSEC_DEBUG(1, "libcomapp not available, cannot import certificate. (%s: '%s')", __func__, filename);
+#endif
 }
 
 

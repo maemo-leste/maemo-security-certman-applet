@@ -3,7 +3,7 @@ Section: x11
 Priority: extra
 Maintainer: Pali Rohár <pali.rohar@gmail.com>
 Build-Depends-Indep: gettext
-Build-Depends: debhelper (>= 5), autotools-dev, osso-af-settings, libosso-dev (>= 1.0.2-1), libhildon1-dev (>= 0.9.9-6), hildon-control-panel-dev (>= 1.0.0-1), libdbus-glib-1-2 (>= 0.60-1osso1), libhildonfm2-dev, libcomapp-dev, libmaemosec-dev(>= 0.0.9), libmaemosec-certman-dev (>= 0.0.9), libssl-dev
+Build-Depends: debhelper (>= 5), autotools-dev, osso-af-settings, libosso-dev (>= 1.0.2-1), libhildon1-dev (>= 0.9.9-6), hildon-control-panel-dev (>= 1.0.0-1), libdbus-glib-1-2 (>= 0.60-1osso1), libhildonfm2-dev, libmaemosec-dev(>= 0.0.9), libmaemosec-certman-dev (>= 0.0.9), libssl-dev
 Standards-Version: 3.7.2
 
 Package: maemosec-certman-applet

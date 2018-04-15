@@ -59,7 +59,6 @@ PKG_CHECK_MODULES(HILDON,
 hildon-1 >= 1.0.0 
 hildon-control-panel >= 0.10.0 
 hildon-fm-2 >= 0.8.2
-comapp
 )
 AC_SUBST(HILDON_LIBS)
 AC_SUBST(HILDON_CFLAGS)
