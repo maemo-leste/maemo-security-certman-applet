@@ -16,7 +16,7 @@ Description: Control Panel Certificate Manager plugin
 Package: maemosec-certman-applet-dbg
 Section: devel
 Architecture: any
-Depends: maemosec-certman-applet (= ${Source-Version})
+Depends: maemosec-certman-applet (= ${source:Version})
 Description: Debug symbols for the control panel certificate manager plugin
  Debug symbols for the control panel certificate manager plugin
 
@@ -30,7 +30,7 @@ Description: Certificate manager external UI library.
 Package: libmaemosec-certman-applet0-dbg
 Section: libdevel
 Architecture: any
-Depends: libmaemosec-certman-applet0 (= ${Source-Version})
+Depends: libmaemosec-certman-applet0 (= ${source:Version})
 Description: Debug symbols for the certificate manager external UI library.
  Debug symbols for the certificate manager external UI library.
 
