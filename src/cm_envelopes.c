@@ -146,12 +146,14 @@ static void show_pkcs7_info(STACK_OF(PKCS12_SAFEBAG) * bags)
 			}
 			MAEMOSEC_DEBUG(2, "      bag #%d '%s' type %s", i,
 				       PKCS12_get_friendlyname(bag), bagtype);
-			if (bag->attrib) {
+
+			const STACK_OF(X509_ATTRIBUTE) *bag_attribs = PKCS12_SAFEBAG_get0_attrs(bag);
+			if (bag_attribs) {
 				for (j = 0;
-				     j < sk_X509_ATTRIBUTE_num(bag->attrib);
+				     j < sk_X509_ATTRIBUTE_num(bag_attribs);
 				     j++) {
 					attrib =
-					    sk_X509_ATTRIBUTE_value(bag->attrib,
+					    sk_X509_ATTRIBUTE_value(bag_attribs,
 								    j);
 					if (attrib)
 						MAEMOSEC_DEBUG(2,
