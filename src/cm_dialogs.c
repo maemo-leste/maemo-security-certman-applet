@@ -1438,9 +1438,12 @@ static GtkWidget *_create_infobox(gpointer window, X509 * cert,
 				    fingerprint_text, sizeof(fingerprint_text)))
 		{
 #ifdef OPENSSL_NO_MD2
-			if (EVP_md5() == sigtype)
+			if (EVP_md5() == sigtype ||
+				EVP_sha1() == sigtype)
 #else
-			if (EVP_md5() == sigtype || EVP_md2() == sigtype)
+			if (EVP_md5() == sigtype ||
+				EVP_md2() == sigtype ||
+				EVP_sha1() == sigtype)
 #endif
 				hildon_helper_set_logical_color(GTK_WIDGET
 								(infobox),
