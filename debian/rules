@@ -30,7 +30,7 @@ configure-stamp:
 	./configure --prefix=/usr --sysconfdir=/etc
 	touch $@
 
-build: build-stamp
+build build-arch: build-stamp
 build-stamp: configure-stamp
 	dh_testdir
 	$(MAKE)
