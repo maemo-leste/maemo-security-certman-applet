@@ -83,6 +83,10 @@ PKG_CHECK_MODULES(MAEMOSEC, maemosec >= 0.0.3 maemosec-certman >= 0.0.3 )
 AC_SUBST(MAEMOSEC_CFLAGS)
 AC_SUBST(MAEMOSEC_LIBS)
 
+PKG_CHECK_MODULES(COMAPP, comapp >= 1.8.04 )
+AC_SUBST(COMAPP_CFLAGS)
+AC_SUBST(COMAPP_LIBS)
+
 PKG_CHECK_MODULES(OSSOSETTINGS, osso-af-settings >= 0.8.1)
 localedir=`pkg-config osso-af-settings --variable=localedir`
 
