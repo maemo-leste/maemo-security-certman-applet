@@ -1,3 +1,9 @@
+maemo-security-certman-applet (0.2.3-1) unstable; urgency=medium
+
+  * Fix dependencies of libmaemosec-certman-applet0
+
+ -- Merlijn Wajer <merlijn@wizzup.org>  Sun, 18 Nov 2018 14:54:42 +0100
+
 maemo-security-certman-applet (0.2.3) unstable; urgency=medium
 
   * Fix builds with libcomapp
