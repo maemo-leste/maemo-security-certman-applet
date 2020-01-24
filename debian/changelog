@@ -1,3 +1,9 @@
+maemo-security-certman-applet (0.2.4-1) unstable; urgency=medium
+
+  * Untested port to GIO from GVFS
+
+ -- Merlijn Wajer <merlijn@wizzup.org>  Fri, 24 Jan 2020 13:30:11 +0100
+
 maemo-security-certman-applet (0.2.3-1) unstable; urgency=medium
 
   * Fix dependencies of libmaemosec-certman-applet0
