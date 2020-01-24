@@ -33,7 +33,6 @@
 #include <gdk/gdkx.h>
 #include <glib/gprintf.h>
 #include <openssl/err.h>
-#include <libgnomevfs/gnome-vfs.h>
 
 #include <X11/Xlib.h>
 #include <X11/X.h>
@@ -290,8 +289,6 @@ gboolean osso_init(osso_context_t ** osso)
 	if (ret != OSSO_OK) {
 		MAEMOSEC_ERROR("Could not set callback for HW monitoring");
 	}
-	if (!gnome_vfs_init())
-		MAEMOSEC_ERROR("%s: gnome_vfs_init returned FALSE", __func__);
 
 	return TRUE;
 }
@@ -301,8 +298,6 @@ gboolean osso_deinit(osso_context_t * osso)
 {
 	/* Unset callbacks */
 	g_assert(osso);
-
-	gnome_vfs_shutdown();
 
 	osso_rpc_unset_cb_f(osso,
 			    "com.nokia.certman",

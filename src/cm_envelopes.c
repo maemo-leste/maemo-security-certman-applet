@@ -23,8 +23,7 @@
  */
 
 #include "cm_envelopes.h"
-#include <libgnomevfs/gnome-vfs.h>
-#include <libgnomevfs/gnome-vfs-result.h>
+#include <gio/gio.h>
 #include <openssl/x509v3.h>
 #include <maemosec_common.h>
 #include <maemosec_certman.h>
@@ -234,12 +233,15 @@ static void show_pkcs12_info(PKCS12 * data)
 
 #define BUFFER_SIZE 1024
 
-static GnomeVFSResult _uri_to_temp(const gchar * uri, FILE ** fp)
+static gboolean _uri_to_temp(const gchar * uri, FILE ** fp)
 {
 	FILE *tmpfp = NULL;
-	GnomeVFSHandle *handle = NULL;
-	GnomeVFSResult result = GNOME_VFS_OK;
-	GnomeVFSFileSize size = 0;
+	GFileInputStream* handle = NULL;
+	GFile* file = NULL;
+	GError* err = NULL;
+	gboolean result = TRUE;
+	gssize size;
+
 	guint8 buffer[BUFFER_SIZE];
 	size_t wsize = 0;
 
@@ -249,25 +251,34 @@ static GnomeVFSResult _uri_to_temp(const gchar * uri, FILE ** fp)
 	*fp = NULL;
 
 	/* Open given URI for reading */
-	result = gnome_vfs_open(&handle, uri, GNOME_VFS_OPEN_READ);
-	if (result != GNOME_VFS_OK) {
-		MAEMOSEC_ERROR("%s: gnome_vfs_open failed, rc = %d", __func__,
-			       result);
-		return (result);
+	file = g_file_new_for_uri(uri);
+	handle = g_file_read(file, NULL, &err);
+	if (err != NULL) {
+		MAEMOSEC_ERROR("%s: g_file_read failed, rc = %d", __func__, err->message);
+		g_error_free (err);
+		result = FALSE;
+		goto unref_file;
 	}
 
 	/* Open tmpfile */
 	tmpfp = tmpfile();
 	if (tmpfp == NULL) {
 		MAEMOSEC_ERROR("%s: cannot create tmpfile", __func__);
-		return (GNOME_VFS_ERROR_NO_SPACE);
+		result = FALSE;
+		return result;
 	}
 
 	/* Read from URI and write it to tmpfile */
 	do {
-		result =
-		    gnome_vfs_read(handle, (gpointer) buffer, BUFFER_SIZE,
-				   &size);
+		err = NULL;
+		size = g_input_stream_read((GInputStream*)handle, buffer, BUFFER_SIZE, NULL, &err);
+		if (err != NULL) {
+			MAEMOSEC_ERROR("%s: g_input_stream_read failed, rc = %d", __func__, err->message);
+			g_error_free (err);
+			result = FALSE;
+			goto unref_handle;
+		}
+
 		if (size > 0) {
 			wsize = fwrite((void *)buffer, 1, (size_t) size, tmpfp);
 
@@ -275,24 +286,25 @@ static GnomeVFSResult _uri_to_temp(const gchar * uri, FILE ** fp)
 				MAEMOSEC_ERROR("Wrong number of bytes written");
 			}
 		}
-
 	}
-	while (size > 0 && result == GNOME_VFS_OK);
+	while (size > 0 && result == TRUE);
 
-	/* Close GnomeVFS Handle */
-	gnome_vfs_close(handle);
+unref_file:
+	g_object_unref(file);
+unref_handle:
+	g_object_unref(handle);
 
 	/* Return error result */
-	if (result != GNOME_VFS_ERROR_EOF && result != GNOME_VFS_OK) {
+	if (result == FALSE) {
 		fclose(tmpfp);
-		MAEMOSEC_ERROR("%s: gnome vfs error %d", __func__, result);
-		return (result);
+		MAEMOSEC_ERROR("%s: fs error %d", __func__, result);
+		return result;
 	}
 
 	/* Save tmpfile FILE* to return value and return GNOME_VFS_OK */
 	rewind(tmpfp);
 	*fp = tmpfp;
-	return (GNOME_VFS_OK);
+	return result;
 }
 
 /*
@@ -309,22 +321,21 @@ extract_envelope(gpointer window,
 	gchar *shortname = NULL;
 	const char *filetype = NULL;
 	void *idata = NULL;
-	GnomeVFSURI *vfs_uri = NULL;
+	gchar *local_filename = NULL;
 	gboolean result = FALSE;
 
 	*certs = NULL;
 	*pkey = NULL;
 	*password = NULL;
 
-	if (GNOME_VFS_OK != _uri_to_temp(fileuri, &fp)) {
+	if (_uri_to_temp(fileuri, &fp) == FALSE) {
 		MAEMOSEC_ERROR("Cannot open '%s'", fileuri);
 		return (FALSE);
 	}
-	vfs_uri = gnome_vfs_uri_new(fileuri);
-	if (NULL != vfs_uri) {
-		shortname = gnome_vfs_uri_extract_short_name(vfs_uri);
-		free(vfs_uri);
-		vfs_uri = NULL;
+    local_filename = g_filename_from_uri(fileuri, NULL, NULL);
+	if (NULL != local_filename) {
+		shortname = g_path_get_basename(local_filename);
+		g_free(local_filename);
 	}
 	if (NULL == shortname) {
 		shortname = strrchr(fileuri, '/');
