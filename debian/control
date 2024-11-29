@@ -13,26 +13,12 @@ Depends: ${shlibs:Depends}, hildon-control-panel (>= 1.0.0), osso-icons, ke-recv
 Description: Control Panel Certificate Manager plugin
  Certificate Manager for Control Panel.
 
-Package: maemosec-certman-applet-dbg
-Section: devel
-Architecture: any
-Depends: maemosec-certman-applet (= ${source:Version})
-Description: Debug symbols for the control panel certificate manager plugin
- Debug symbols for the control panel certificate manager plugin
-
 Package: libmaemosec-certman-applet0
 Section: libs
 Architecture: any
 Depends: ${shlibs:Depends}
 Description: Certificate manager external UI library.
  Certificate manager external UI library.
-
-Package: libmaemosec-certman-applet0-dbg
-Section: libdevel
-Architecture: any
-Depends: libmaemosec-certman-applet0 (= ${source:Version})
-Description: Debug symbols for the certificate manager external UI library.
- Debug symbols for the certificate manager external UI library.
 
 Package: libmaemosec-certman-applet-dev
 Section: libdevel
