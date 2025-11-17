@@ -1122,7 +1122,8 @@ get_fingerprint(X509 * of_cert,
 {
 	const EVP_MD *of_type;
 	unsigned char digest_bin[MAX_DIGEST_LEN];
-	size_t digest_len, i;
+	size_t i;
+	unsigned int digest_len;
 	char *digest_name, *hto;
 
 	/*
